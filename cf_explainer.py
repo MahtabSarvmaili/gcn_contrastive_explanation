@@ -1,5 +1,5 @@
 # Based on https://github.com/RexYing/gnn-model-explainer/blob/master/explainer/explain.py
-
+import os
 import math
 import time
 import torch
@@ -7,10 +7,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import torch.optim as optim
+import matplotlib.pyplot as plt
 from torch.nn.utils import clip_grad_norm
 from utils import get_degree_matrix
 from gcn_perturb import GCNSyntheticPerturb
 from utils import normalize_adj
+torch.manual_seed(0)
+os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
 
 class CFExplainer:
@@ -49,7 +52,7 @@ class CFExplainer:
         for name, param in self.cf_model.named_parameters():
             print("cf model required_grad: ", name, param.requires_grad)
 
-    def explain(self, cf_optimizer, node_idx, new_idx, lr, n_momentum, num_epochs):
+    def explain(self, cf_optimizer, node_idx, new_idx, lr, n_momentum, num_epochs, PN_training=True):
         self.node_idx = node_idx
         self.new_idx = new_idx
 
@@ -64,21 +67,32 @@ class CFExplainer:
         elif cf_optimizer == "Adadelta":
             self.cf_optimizer = optim.Adadelta(self.cf_model.parameters(), lr=lr)
 
+        perturb_loss_array = []
+        total_loss_ = []
         best_cf_example = []
         best_loss = np.inf
         num_cf_examples = 0
         for epoch in range(num_epochs):
-            new_example, loss_total = self.train(epoch)
-            if new_example != [] and loss_total < best_loss:
+            if PN_training:
+                new_example, _, pn_loss = self.train(epoch, PN_training)
+                loss_ = np.abs(pn_loss.cpu().detach().numpy())
+                perturb_loss_array.append(loss_)
+                # total_loss_.append(loss_total)
+            else:
+                new_example, loss_total, _ = self.train(epoch, PN_training)
+                # perturb_loss_array.append(pn_loss.cpu().detach().numpy())
+                total_loss_.append(loss_total)
+                loss_ = loss_total
+            if new_example != [] and loss_ < best_loss:
                 best_cf_example.append(new_example)
-                best_loss = loss_total
+                best_loss = loss_
                 num_cf_examples += 1
         print("{} CF examples for node_idx = {}".format(num_cf_examples, self.node_idx))
         print(" ")
         return (best_cf_example)
 
 
-    def train(self, epoch):
+    def train(self, epoch, PN_training):
         t = time.time()
         self.cf_model.train()
         self.cf_optimizer.zero_grad()
@@ -92,16 +106,17 @@ class CFExplainer:
         y_pred_new = torch.argmax(output[self.new_idx])
         y_pred_new_actual = torch.argmax(output_actual[self.new_idx])
 
-        # pertinent loss function
-        y_pred_new_prob = torch.max(output[self.new_idx])
-        weight = torch.ones(self.num_classes).bool()
-        weight[self.y_pred_orig] = False
-        y_pred_new_actual_prob = output[self.new_idx][weight].max()
+        loss_total, loss_pred, loss_graph_dist, cf_adj = self.cf_model.loss(
+            output[self.new_idx], self.y_pred_orig,y_pred_new_actual
+        )
+        pn_loss = self.cf_model.loss_pertinent_negative(output[self.new_idx], self.y_pred_orig)
 
-        # loss_pred indicator should be based on y_pred_new_actual NOT y_pred_new!
-        loss_total, loss_pred, loss_graph_dist, cf_adj = self.cf_model.loss(output[self.new_idx], self.y_pred_orig,
-                                                                            y_pred_new_actual)
-        loss_total.backward()
+        # loss_total.backward()
+
+        if PN_training:
+            pn_loss.backward()
+        else:
+            loss_total.backward()
         clip_grad_norm(self.cf_model.parameters(), 2.0)
         self.cf_optimizer.step()
         print('Node idx: {}'.format(self.node_idx),
@@ -116,6 +131,7 @@ class CFExplainer:
                                                                          y_pred_new_actual))
         print(" ")
         cf_stats = []
+
         if y_pred_new_actual != self.y_pred_orig:
             cf_stats = [self.node_idx.item(), self.new_idx.item(),
                         cf_adj.cpu().detach().numpy(), self.sub_adj.cpu().detach().numpy(),
@@ -124,4 +140,4 @@ class CFExplainer:
                         self.sub_adj.shape[0], loss_total.item(),
                         loss_pred.item(), loss_graph_dist.item()]
 
-        return (cf_stats, loss_total.item())
+        return (cf_stats, loss_total.item(), pn_loss)

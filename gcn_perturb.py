@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 from utils import get_degree_matrix, create_symm_matrix_from_vec, create_vec_from_symm_matrix
 from layers import GraphConvolution
+torch.manual_seed(0)
 
 
 class GraphConvolutionPerturb(nn.Module):
@@ -40,13 +41,16 @@ class GCNSyntheticPerturb(nn.Module):
     3-layer GCN used in GNN Explainer synthetic tasks
     """
 
-    def __init__(self, nfeat, nhid, nout, nclass, adj, dropout, beta, edge_additions=False):
+    def __init__(self, nfeat, nhid, nout, nclass, adj, dropout, beta, kappa=10, edge_additions=False):
         super(GCNSyntheticPerturb, self).__init__()
         self.adj = adj
         self.nclass = nclass
         self.beta = beta
         self.num_nodes = self.adj.shape[0]
         self.edge_additions = edge_additions  # are edge additions included in perturbed matrix
+        self.kappa = torch.tensor(kappa).cuda()
+        self.beta = torch.tensor(beta).cuda()
+        self.const = torch.zeros(1, requires_grad=True)
 
         # P_hat needs to be symmetric ==>
         # learn vector representing entries in upper/lower triangular matrix and use to populate P_hat later
@@ -88,7 +92,8 @@ class GCNSyntheticPerturb(nn.Module):
         A_tilde.requires_grad = True
 
         if self.edge_additions:  # Learn new adj matrix directly
-            A_tilde = F.sigmoid(self.P_hat_symm) + torch.eye(self.num_nodes).cuda()  # Use sigmoid to bound P_hat in [0,1]
+            A_tilde = F.sigmoid(self.P_hat_symm) + torch.eye(self.num_nodes).cuda()
+            # Use sigmoid to bound P_hat in [0,1]
         else:  # Learn P_hat that gets multiplied element-wise with adj -- only edge deletions
             A_tilde = F.sigmoid(self.P_hat_symm) * self.sub_adj.cuda() + torch.eye(
                 self.num_nodes).cuda()  # Use sigmoid to bound P_hat in [0,1]
@@ -157,4 +162,30 @@ class GCNSyntheticPerturb(nn.Module):
         loss_total = pred_same * loss_pred + self.beta * loss_graph_dist
         return loss_total, loss_pred, loss_graph_dist, cf_adj
 
-    # def loss_pertinent_negative(self, output, y_pred_orig, y_pred_new_actual):
+    def loss_pertinent_negative(self, output, y_pred_orig):
+        # pertinent loss function
+        pert_y_prob = output[y_pred_orig]
+        weight = torch.ones(self.nclass).bool()
+        weight[y_pred_orig] = False
+        pert_noty_prob = output[weight].max()
+
+        diff_y_noty = pert_y_prob - pert_noty_prob
+        loss_perturb = torch.max(diff_y_noty, -self.kappa)
+        cf_adj = self.P
+        cf_adj.requires_grad = True
+        loss_graph_dist = sum(sum(abs(cf_adj - self.adj.cuda()))) / 2  # Number of edges changed (symmetrical)
+
+        # perturbation loss with prediction probability
+        # output_exp = torch.exp(output)
+        # pert_noty_prob_exp = output_exp[weight].max()
+        # diff_y_noty_exp = output_exp[y_pred_orig] - pert_noty_prob_exp
+        # loss_perturb_exp = torch.max(diff_y_noty_exp, -self.kappa)
+        # print(f'the perturbation loss with exp {loss_perturb_exp}')
+        # print(f'the difference between prob of y and y_not {diff_y_noty_exp}\n')
+
+        # dist_l1 = self.beta * torch.sum(torch.abs(self.P_hat_symm))
+        # dist_l2 = torch.sum(torch.square(self.P_hat_symm))
+        # output uses differentiable P_hat ==> adjacency matrix not binary, but needed for training
+        # output_actual uses thresholded P ==> binary adjacency matrix ==> gives actual prediction
+        loss_total = loss_perturb + self.beta * loss_graph_dist #+ dist_l2 + self.beta*dist_l1
+        return loss_total

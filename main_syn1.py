@@ -8,6 +8,8 @@ from torch_geometric.utils import dense_to_sparse
 from utils import normalize_adj, get_neighbourhood
 from model import GCN, train
 from cf_explainer import CFExplainer
+torch.manual_seed(0)
+np.random.seed(0)
 
 
 def main():
@@ -17,7 +19,7 @@ def main():
     seed = 42
     dropout = 0.5
     n_layers = 3
-    epoch = 200
+    epoch = 500
     device = 'cuda'
     beta = 0.5
     learning_rate = 0.001
