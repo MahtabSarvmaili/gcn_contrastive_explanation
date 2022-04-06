@@ -52,6 +52,79 @@ class CFExplainer:
         for name, param in self.cf_model.named_parameters():
             print("cf model required_grad: ", name, param.requires_grad)
 
+
+    def train(self, epoch):
+        self.cf_model.train()
+        self.cf_optimizer.zero_grad()
+
+        # output uses differentiable P_hat ==> adjacency matrix not binary, but needed for training
+        # output_actual uses thresholded P ==> binary adjacency matrix ==> gives actual prediction
+        output = self.cf_model.forward(self.x, self.A_x)
+        output_actual, self.P = self.cf_model.forward_prediction(self.x)
+
+        # Need to use new_idx from now on since sub_adj is reindexed
+        y_pred_new = torch.argmax(output[self.new_idx])
+        y_pred_new_actual = torch.argmax(output_actual[self.new_idx])
+
+        loss_total, loss_pred, loss_graph_dist, cf_adj = self.cf_model.loss(
+            output[self.new_idx], self.y_pred_orig,y_pred_new_actual
+        )
+        loss_total.backward()
+        clip_grad_norm(self.cf_model.parameters(), 2.0)
+        self.cf_optimizer.step()
+        print('Node idx: {}'.format(self.node_idx),
+              'New idx: {}'.format(self.new_idx),
+              'Epoch: {:04d}'.format(epoch + 1),
+              'loss: {:.4f}'.format(loss_total.item()),
+              'pred loss: {:.4f}'.format(loss_pred.item()),
+              'graph loss: {:.4f}'.format(loss_graph_dist.item()))
+        print('Output: {}\n'.format(output[self.new_idx].data),
+              'Output nondiff: {}\n'.format(output_actual[self.new_idx].data),
+              'orig pred: {}, new pred: {}, new pred nondiff: {}'.format(self.y_pred_orig, y_pred_new,
+                                                                         y_pred_new_actual))
+        print(" ")
+        cf_stats = []
+        if y_pred_new_actual != self.y_pred_orig:
+            cf_stats = [self.node_idx.item(), self.new_idx.item(),
+                        cf_adj.detach().numpy(), self.sub_adj.detach().numpy(),
+                        self.y_pred_orig.item(), y_pred_new.item(),
+                        y_pred_new_actual.item(), self.sub_labels[self.new_idx].numpy(),
+                        self.sub_adj.shape[0], loss_total.item(),
+                        loss_pred.item(), loss_graph_dist.item()]
+
+        return (cf_stats, loss_total.item())
+
+    def train_model_pn(self, epoch):
+        self.cf_model.train()
+        self.cf_optimizer.zero_grad()
+        output = self.cf_model.forward(self.x, self.A_x, logits=False)
+        output_actual = self.cf_model.forward_prediction(self.x, logits=False)
+        y_pred_new = torch.argmax(output[self.new_idx])
+        y_pred_new_actual = torch.argmax(output_actual[self.new_idx])
+        loss_total, loss_perturb, loss_graph_dist, cf_adj = self.cf_model.loss_pertinent_negative(
+            output[self.new_idx], self.y_pred_orig
+        )
+
+        loss_total.backward()
+        clip_grad_norm(self.cf_model.parameters(), 2.0)
+        self.cf_optimizer.step()
+        print('Node idx: {}'.format(self.node_idx),
+              'New idx: {}'.format(self.new_idx),
+              'Epoch: {:04d}'.format(epoch + 1),
+              'loss: {:.4f}'.format(loss_total.item()),
+              'pred loss: {:.4f}'.format(loss_perturb.item()),
+              'graph loss: {:.4f}'.format(loss_graph_dist.item()))
+        print(" ")
+        cf_stats = []
+
+        if y_pred_new_actual != self.y_pred_orig:
+            cf_stats = [self.node_idx.item(), self.new_idx.item(),
+                        cf_adj.cpu().detach().numpy(), self.sub_adj.cpu().detach().numpy(),
+                        self.y_pred_orig.item(), y_pred_new.item(),
+                        y_pred_new_actual.item(), self.sub_labels[self.new_idx].cpu().detach().numpy(),
+                        self.sub_adj.shape[0], loss_total.item(), loss_perturb.item(), loss_graph_dist.item()]
+        return cf_stats, loss_total
+
     def explain(self, cf_optimizer, node_idx, new_idx, lr, n_momentum, num_epochs, PN_training=True):
         self.node_idx = node_idx
         self.new_idx = new_idx
@@ -74,70 +147,18 @@ class CFExplainer:
         num_cf_examples = 0
         for epoch in range(num_epochs):
             if PN_training:
-                new_example, _, pn_loss = self.train(epoch, PN_training)
-                loss_ = np.abs(pn_loss.cpu().detach().numpy())
-                perturb_loss_array.append(loss_)
-                # total_loss_.append(loss_total)
+                new_example, loss_total = self.train_model_pn(epoch)
+                if new_example != [] and loss_total < best_loss:
+                    best_cf_example.append(new_example)
+                    best_loss = loss_total
+                    num_cf_examples += 1
             else:
-                new_example, loss_total, _ = self.train(epoch, PN_training)
+                new_example = self.train_model_pn(epoch)
                 # perturb_loss_array.append(pn_loss.cpu().detach().numpy())
                 total_loss_.append(loss_total)
                 loss_ = loss_total
-            if new_example != [] and loss_ < best_loss:
-                best_cf_example.append(new_example)
-                best_loss = loss_
-                num_cf_examples += 1
+
         print("{} CF examples for node_idx = {}".format(num_cf_examples, self.node_idx))
         print(" ")
         return (best_cf_example)
 
-
-    def train(self, epoch, PN_training):
-        t = time.time()
-        self.cf_model.train()
-        self.cf_optimizer.zero_grad()
-
-        # output uses differentiable P_hat ==> adjacency matrix not binary, but needed for training
-        # output_actual uses thresholded P ==> binary adjacency matrix ==> gives actual prediction
-        output = self.cf_model.forward(self.x, self.A_x)
-        output_actual, self.P = self.cf_model.forward_prediction(self.x)
-
-        # Need to use new_idx from now on since sub_adj is reindexed
-        y_pred_new = torch.argmax(output[self.new_idx])
-        y_pred_new_actual = torch.argmax(output_actual[self.new_idx])
-
-        loss_total, loss_pred, loss_graph_dist, cf_adj = self.cf_model.loss(
-            output[self.new_idx], self.y_pred_orig,y_pred_new_actual
-        )
-        pn_loss = self.cf_model.loss_pertinent_negative(output[self.new_idx], self.y_pred_orig)
-
-        # loss_total.backward()
-
-        if PN_training:
-            pn_loss.backward()
-        else:
-            loss_total.backward()
-        clip_grad_norm(self.cf_model.parameters(), 2.0)
-        self.cf_optimizer.step()
-        print('Node idx: {}'.format(self.node_idx),
-              'New idx: {}'.format(self.new_idx),
-              'Epoch: {:04d}'.format(epoch + 1),
-              'loss: {:.4f}'.format(loss_total.item()),
-              'pred loss: {:.4f}'.format(loss_pred.item()),
-              'graph loss: {:.4f}'.format(loss_graph_dist.item()))
-        print('Output: {}\n'.format(output[self.new_idx].data),
-              'Output nondiff: {}\n'.format(output_actual[self.new_idx].data),
-              'orig pred: {}, new pred: {}, new pred nondiff: {}'.format(self.y_pred_orig, y_pred_new,
-                                                                         y_pred_new_actual))
-        print(" ")
-        cf_stats = []
-
-        if y_pred_new_actual != self.y_pred_orig:
-            cf_stats = [self.node_idx.item(), self.new_idx.item(),
-                        cf_adj.cpu().detach().numpy(), self.sub_adj.cpu().detach().numpy(),
-                        self.y_pred_orig.item(), y_pred_new.item(),
-                        y_pred_new_actual.item(), self.sub_labels[self.new_idx].cpu().detach().numpy(),
-                        self.sub_adj.shape[0], loss_total.item(),
-                        loss_pred.item(), loss_graph_dist.item()]
-
-        return (cf_stats, loss_total.item(), pn_loss)

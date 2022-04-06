@@ -18,43 +18,46 @@ class GCN(nn.Module):
         self.lin = nn.Linear(nhid+nhid+nout, nclasses)
         self.dropout = dropout
 
-    def forward(self, x, adj):
+    def forward(self, x, adj, logit=True):
         x1 = F.relu(self.gc1(x, adj))
         x1 = F.dropout(x1, self.dropout, training=False)
         x2 = F.relu(self.gc2(x1, adj))
         x2 = F.dropout(x2, self.dropout, training=self.training)
         x3 = self.gc3(x2, adj)
         x = self.lin(torch.cat((x1, x2, x3), dim=1))
-        return F.log_softmax(x, dim=1)
+        if logit:
+            return F.log_softmax(x, dim=1)
+        else:
+            return F.softmax(x)
 
 
 def train(
         model:nn.Module,
-        features,
-        adj,
-        labels,
-        idx_train,
-        idx_val,
-        optimizer:optim,
-        epoch
+        train_features,
+        train_adj,
+        train_labels,
+        train_mask,
+        optimizer: optim,
+        epoch,
+        val_features,
+        val_adj,
+        val_label,
+        val_mask
 ):
     model.train()
     for i in range(epoch):
-        idx_train = idx_train[torch.randperm(idx_train.size()[0])]
-        idx_val = idx_val[torch.randperm(idx_val.size()[0])]
-
         optimizer.zero_grad()
-        preds = model(features, adj)
-        loss_train = F.nll_loss(preds[idx_train], labels[idx_train])
-        acc_train = accuracy(preds[idx_train], labels[idx_train])
+        preds = model.forward(train_features, train_adj)
+        loss_train = F.nll_loss(preds, train_labels)
+        acc_train = accuracy(preds, train_labels)
         loss_train.backward()
         optimizer.step()
 
         if i%50==0 and i!=0:
             model.eval()
-            preds = model(features, adj)
-            loss_val = F.nll_loss(preds[idx_val], labels[idx_val])
-            acc_val = accuracy(preds[idx_val], labels[idx_val])
+            preds = model(val_features, val_adj)
+            loss_val = F.nll_loss(preds, val_label)
+            acc_val = accuracy(preds, val_label)
             print('Epoch: {:04d}'.format(i),
                   'loss_train: {:.4f}'.format(loss_train.item()),
                   'acc_train: {:.4f}'.format(acc_train.item()),

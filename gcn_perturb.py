@@ -41,7 +41,7 @@ class GCNSyntheticPerturb(nn.Module):
     3-layer GCN used in GNN Explainer synthetic tasks
     """
 
-    def __init__(self, nfeat, nhid, nout, nclass, adj, dropout, beta, kappa=10, edge_additions=False):
+    def __init__(self, nfeat, nhid, nout, nclass, adj, dropout, beta, gamma=0.5, kappa=10, edge_additions=False):
         super(GCNSyntheticPerturb, self).__init__()
         self.adj = adj
         self.nclass = nclass
@@ -51,7 +51,7 @@ class GCNSyntheticPerturb(nn.Module):
         self.kappa = torch.tensor(kappa).cuda()
         self.beta = torch.tensor(beta).cuda()
         self.const = torch.zeros(1, requires_grad=True)
-
+        self.gamma = torch.tensor(gamma).cuda()
         # P_hat needs to be symmetric ==>
         # learn vector representing entries in upper/lower triangular matrix and use to populate P_hat later
         self.P_vec_size = int((self.num_nodes * self.num_nodes - self.num_nodes) / 2) + self.num_nodes
@@ -83,7 +83,7 @@ class GCNSyntheticPerturb(nn.Module):
             else:
                 torch.sub(self.P_vec, eps)
 
-    def forward(self, x, sub_adj):
+    def forward(self, x, sub_adj, logits=True):
         self.sub_adj = sub_adj
         # Same as normalize_adj in utils.py except includes P_hat in A_tilde
         self.P_hat_symm = create_symm_matrix_from_vec(self.P_vec, self.num_nodes)  # Ensure symmetry
@@ -112,9 +112,12 @@ class GCNSyntheticPerturb(nn.Module):
         x2 = F.dropout(x2, self.dropout, training=self.training)
         x3 = self.gc3(x2, norm_adj)
         x = self.lin(torch.cat((x1, x2, x3), dim=1))
-        return F.log_softmax(x, dim=1)
+        if logits:
+            return F.log_softmax(x, dim=1)
+        else:
+            return F.softmax(x, dim=1)
 
-    def forward_prediction(self, x):
+    def forward_prediction(self, x, logits=True):
         # Same as forward but uses P instead of P_hat ==> non-differentiable
         # but needed for actual predictions
 
@@ -132,14 +135,16 @@ class GCNSyntheticPerturb(nn.Module):
 
         # Create norm_adj = (D + I)^(-1/2) * (A + I) * (D + I) ^(-1/2)
         norm_adj = torch.mm(torch.mm(D_tilde_exp, A_tilde), D_tilde_exp)
-
         x1 = F.relu(self.gc1(x, norm_adj))
         x1 = F.dropout(x1, self.dropout, training=self.training)
         x2 = F.relu(self.gc2(x1, norm_adj))
         x2 = F.dropout(x2, self.dropout, training=self.training)
         x3 = self.gc3(x2, norm_adj)
         x = self.lin(torch.cat((x1, x2, x3), dim=1))
-        return F.log_softmax(x, dim=1), self.P
+        if logits:
+            return F.log_softmax(x, dim=1)
+        else:
+            return F.softmax(x, dim=1)
 
     def loss(self, output, y_pred_orig, y_pred_new_actual):
         pred_same = (y_pred_new_actual == y_pred_orig).float()
@@ -163,7 +168,7 @@ class GCNSyntheticPerturb(nn.Module):
         return loss_total, loss_pred, loss_graph_dist, cf_adj
 
     def loss_pertinent_negative(self, output, y_pred_orig):
-        # pertinent loss function
+
         pert_y_prob = output[y_pred_orig]
         weight = torch.ones(self.nclass).bool()
         weight[y_pred_orig] = False
@@ -173,19 +178,7 @@ class GCNSyntheticPerturb(nn.Module):
         loss_perturb = torch.max(diff_y_noty, -self.kappa)
         cf_adj = self.P
         cf_adj.requires_grad = True
-        loss_graph_dist = sum(sum(abs(cf_adj - self.adj.cuda()))) / 2  # Number of edges changed (symmetrical)
-
-        # perturbation loss with prediction probability
-        # output_exp = torch.exp(output)
-        # pert_noty_prob_exp = output_exp[weight].max()
-        # diff_y_noty_exp = output_exp[y_pred_orig] - pert_noty_prob_exp
-        # loss_perturb_exp = torch.max(diff_y_noty_exp, -self.kappa)
-        # print(f'the perturbation loss with exp {loss_perturb_exp}')
-        # print(f'the difference between prob of y and y_not {diff_y_noty_exp}\n')
-
-        # dist_l1 = self.beta * torch.sum(torch.abs(self.P_hat_symm))
-        # dist_l2 = torch.sum(torch.square(self.P_hat_symm))
-        # output uses differentiable P_hat ==> adjacency matrix not binary, but needed for training
-        # output_actual uses thresholded P ==> binary adjacency matrix ==> gives actual prediction
-        loss_total = loss_perturb + self.beta * loss_graph_dist #+ dist_l2 + self.beta*dist_l1
-        return loss_total
+        loss_graph_dist = sum(sum(abs(cf_adj - self.adj.cuda()))) / 2
+        dist_l1 = self.P_hat_symm.abs().sum()
+        loss_total = loss_perturb + self.beta * loss_graph_dist + self.gamma*dist_l1
+        return loss_total, loss_perturb, loss_graph_dist, self.P
