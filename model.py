@@ -33,31 +33,28 @@ class GCN(nn.Module):
 
 def train(
         model:nn.Module,
-        train_features,
+        features,
         train_adj,
-        train_labels,
+        labels,
         train_mask,
         optimizer: optim,
         epoch,
-        val_features,
-        val_adj,
-        val_label,
         val_mask
 ):
     model.train()
     for i in range(epoch):
         optimizer.zero_grad()
-        preds = model.forward(train_features, train_adj)
-        loss_train = F.nll_loss(preds, train_labels)
-        acc_train = accuracy(preds, train_labels)
+        preds = model.forward(features, train_adj)
+        loss_train = F.nll_loss(preds[train_mask], labels[train_mask])
+        acc_train = accuracy(preds[train_mask], labels[train_mask])
         loss_train.backward()
         optimizer.step()
 
-        if i%50==0 and i!=0:
+        if i%100==0 and i!=0:
             model.eval()
-            preds = model(val_features, val_adj)
-            loss_val = F.nll_loss(preds, val_label)
-            acc_val = accuracy(preds, val_label)
+            preds = model(features, train_adj)
+            loss_val = F.nll_loss(preds[val_mask], labels[val_mask])
+            acc_val = accuracy(preds[val_mask], labels[val_mask])
             print('Epoch: {:04d}'.format(i),
                   'loss_train: {:.4f}'.format(loss_train.item()),
                   'acc_train: {:.4f}'.format(acc_train.item()),

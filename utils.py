@@ -104,9 +104,9 @@ def get_degree_matrix(adj):
     return torch.diag(sum(adj))
 
 
-def normalize_adj(adj):
+def normalize_adj(adj, device):
     # Normalize adjacancy matrix according to reparam trick in GCN paper
-    A_tilde = adj + torch.eye(adj.shape[0])
+    A_tilde = adj + torch.eye(adj.shape[0], device=device)
     D_tilde = get_degree_matrix(A_tilde)
     # Raise to power -1/2, set all infs to 0s
     D_tilde_exp = D_tilde ** (-1 / 2)
@@ -118,13 +118,13 @@ def normalize_adj(adj):
 
 
 def get_neighbourhood(node_idx, edge_index, n_hops, features, labels):
-    edge_subset = k_hop_subgraph(node_idx, n_hops, edge_index[0])  # Get all nodes involved
-    edge_subset_relabel = subgraph(edge_subset[0], edge_index[0], relabel_nodes=True)  # Get relabelled subset of edges
+    edge_subset = k_hop_subgraph(node_idx, n_hops, edge_index)  # Get all nodes involved
+    edge_subset_relabel = subgraph(edge_subset[0], edge_index, relabel_nodes=True)  # Get relabelled subset of edges
     sub_adj = to_dense_adj(edge_subset_relabel[0]).squeeze()
     sub_feat = features[edge_subset[0], :]
     sub_labels = labels[edge_subset[0]]
     new_index = np.array([i for i in range(len(edge_subset[0]))])
-    node_dict = dict(zip(edge_subset[0].numpy(), new_index))  # Maps orig labels to new
+    node_dict = dict(zip(edge_subset[0].cpu().numpy(), new_index))  # Maps orig labels to new
     # print("Num nodes in subgraph: {}".format(len(edge_subset[0])))
     return sub_adj, sub_feat, sub_labels, node_dict
 
@@ -139,8 +139,8 @@ def create_symm_matrix_from_vec(vector, n_rows):
     return symm_matrix
 
 
-def create_vec_from_symm_matrix(matrix, P_vec_size):
-    idx = torch.tril_indices(matrix.shape[0], matrix.shape[0])
+def create_vec_from_symm_matrix(matrix, P_vec_size, device):
+    idx = torch.tril_indices(matrix.shape[0], matrix.shape[0], device=device)
     vector = matrix[idx[0], idx[1]]
     return vector
 

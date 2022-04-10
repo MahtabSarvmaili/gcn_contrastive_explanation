@@ -41,17 +41,21 @@ class GCNSyntheticPerturb(nn.Module):
     3-layer GCN used in GNN Explainer synthetic tasks
     """
 
-    def __init__(self, nfeat, nhid, nout, nclass, adj, dropout, beta, gamma=0.5, kappa=10, edge_additions=False):
+    def __init__(
+            self, nfeat, nhid, nout, nclass, adj, dropout,
+            beta, gamma=0.5, kappa=10, edge_additions=False, device='cuda'
+    ):
         super(GCNSyntheticPerturb, self).__init__()
         self.adj = adj
         self.nclass = nclass
         self.beta = beta
+        self.device = device
         self.num_nodes = self.adj.shape[0]
         self.edge_additions = edge_additions  # are edge additions included in perturbed matrix
         self.kappa = torch.tensor(kappa).cuda()
         self.beta = torch.tensor(beta).cuda()
-        self.const = torch.zeros(1, requires_grad=True)
-        self.gamma = torch.tensor(gamma).cuda()
+        self.const = torch.zeros(1, requires_grad=True, device=device)
+        self.gamma = torch.tensor(gamma, device=device)
         # P_hat needs to be symmetric ==>
         # learn vector representing entries in upper/lower triangular matrix and use to populate P_hat later
         self.P_vec_size = int((self.num_nodes * self.num_nodes - self.num_nodes) / 2) + self.num_nodes
@@ -73,7 +77,7 @@ class GCNSyntheticPerturb(nn.Module):
         # Think more about how to initialize this
         with torch.no_grad():
             if self.edge_additions:
-                adj_vec = create_vec_from_symm_matrix(self.adj, self.P_vec_size).numpy()
+                adj_vec = create_vec_from_symm_matrix(self.adj, self.P_vec_size, device=self.device).cpu().numpy()
                 for i in range(len(adj_vec)):
                     if i < 1:
                         adj_vec[i] = adj_vec[i] - eps

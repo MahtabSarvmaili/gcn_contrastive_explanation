@@ -52,7 +52,6 @@ class CFExplainer:
         for name, param in self.cf_model.named_parameters():
             print("cf model required_grad: ", name, param.requires_grad)
 
-
     def train(self, epoch):
         self.cf_model.train()
         self.cf_optimizer.zero_grad()
@@ -108,13 +107,14 @@ class CFExplainer:
         loss_total.backward()
         clip_grad_norm(self.cf_model.parameters(), 2.0)
         self.cf_optimizer.step()
-        print('Node idx: {}'.format(self.node_idx),
-              'New idx: {}'.format(self.new_idx),
-              'Epoch: {:04d}'.format(epoch + 1),
-              'loss: {:.4f}'.format(loss_total.item()),
-              'pred loss: {:.4f}'.format(loss_perturb.item()),
-              'graph loss: {:.4f}'.format(loss_graph_dist.item()))
-        print(" ")
+        if epoch%50 == 0 and epoch != 0:
+            print('Node idx: {}'.format(self.node_idx),
+                  'New idx: {}'.format(self.new_idx),
+                  'Epoch: {:04d}'.format(epoch + 1),
+                  'loss: {:.4f}'.format(loss_total.item()),
+                  'pred loss: {:.4f}'.format(loss_perturb.item()),
+                  'graph loss: {:.4f}'.format(loss_graph_dist.item()))
+            print(" ")
         cf_stats = []
 
         if y_pred_new_actual != self.y_pred_orig:
@@ -153,8 +153,11 @@ class CFExplainer:
                     best_loss = loss_total
                     num_cf_examples += 1
             else:
-                new_example = self.train_model_pn(epoch)
-                # perturb_loss_array.append(pn_loss.cpu().detach().numpy())
+                new_example, loss_total = self.train(epoch)
+                if new_example != [] and loss_total < best_loss:
+                    best_cf_example.append(new_example)
+                    best_loss = loss_total
+                    num_cf_examples += 1
                 total_loss_.append(loss_total)
                 loss_ = loss_total
 
