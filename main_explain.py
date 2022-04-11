@@ -16,14 +16,15 @@ from utils import normalize_adj, get_neighbourhood
 from model import GCN, train
 from cf_explainer import CFExplainer
 from gae.utils import preprocess_graph
+from gae.GAE import gae
 torch.manual_seed(0)
 np.random.seed(0)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--device', type=str, default='cuda', help='torch device.')
-parser.add_argument('--seed', type=int, default=42, help='Random seed.')
 parser.add_argument('--epochs', type=int, default=200, help='Number of epochs to train.')
-parser.add_argument('--hidden1', type=int, default=20, help='Number of units in hidden layer 1.')
+parser.add_argument('--hidden1', type=int, default=32, help='Number of units in hidden layer 1.')
+parser.add_argument('--hidden2', type=int, default=16, help='Number of units in hidden layer 2.')
 parser.add_argument('--lr', type=float, default=0.01, help='Initial learning rate.')
 parser.add_argument('--dropout', type=float, default=0., help='Dropout rate (1 - keep probability).')
 parser.add_argument('--dataset-str', type=str, default='cora', help='type of dataset.')
@@ -106,13 +107,16 @@ def main(gae_args, explainer_args):
     y_pred_orig = torch.argmax(output[test_mask], dim=1)
     print("test set y_true counts: {}".format(np.unique(labels[test_mask].cpu().detach().numpy(), return_counts=True)))
     print("test set y_pred_orig counts: {}".format(np.unique(y_pred_orig.cpu().detach().numpy(), return_counts=True)))
+    print("Training GNN is finished.")
+    print("Training AE.")
+    graph_ae = gae(gae_args)
+    print("Explanation step:")
     idx_test = np.arange(0, n_nodes)[test_mask.cpu()]
     test_cf_examples = []
     for i in idx_test[:20]:
         sub_adj, sub_feat, sub_labels, node_dict = get_neighbourhood(
             int(i), dataset.edge_index, n_layers + 1, features, labels)
         new_idx = node_dict[int(i)]
-
         # Check that original model gives same prediction on full graph and subgraph
         with torch.no_grad():
             print("Output original model, full adj: {}".format(output[i]))

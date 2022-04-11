@@ -5,6 +5,8 @@ import numpy as np
 import scipy.sparse as sp
 import torch
 from sklearn.metrics import roc_auc_score, average_precision_score
+torch.manual_seed(0)
+np.random.seed(0)
 
 
 def load_data(dataset):

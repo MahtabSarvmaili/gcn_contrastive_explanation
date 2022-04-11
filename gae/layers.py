@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 from torch.nn.modules.module import Module
 from torch.nn.parameter import Parameter
+torch.manual_seed(0)
 
 
 class GraphConvolution(Module):

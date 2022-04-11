@@ -1,9 +1,7 @@
 from __future__ import division
 from __future__ import print_function
-
 import argparse
 import time
-
 import numpy as np
 import scipy.sparse as sp
 import torch
@@ -11,10 +9,12 @@ from torch import optim
 import os.path as osp
 from torch_geometric.datasets import Planetoid
 import torch_geometric.transforms as T
-from torch_geometric.utils import to_dense_adj
+from torch_geometric.utils import to_dense_adj, train_test_split_edges
 from gae.model import GCNModelVAE
-from optimizer import loss_function
+from gae.optimizer import loss_function
 from gae.utils import load_data, mask_test_edges, preprocess_graph, get_roc_score
+torch.manual_seed(0)
+np.random.seed(0)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--device', type=str, default='cuda', help='torch device.')
@@ -30,20 +30,25 @@ args = parser.parse_args()
 
 
 def gae(args):
+
     path = osp.join(osp.dirname(osp.realpath(__file__)), '..', 'data', 'Planetoid')
     transform = T.Compose([
         T.NormalizeFeatures(),
         T.ToDevice(args.device),
-        T.RandomLinkSplit(num_val=0.1, num_test=0.1, is_undirected=True,
-                          split_labels=True, add_negative_train_samples=False),
     ])
     dataset = Planetoid(path, args.dataset_str, transform=transform)
-    train_data, val_data, test_data = dataset[0]
+    dataset = dataset[0]
+    dataset.train_mask = dataset.test_mask = dataset.val_mask = None
+    dataset = train_test_split_edges(dataset)
+    train_adj = to_dense_adj(dataset.train_pos_edge_index).squeeze(dim=0)
+    val_adj = to_dense_adj(dataset.val_pos_edge_index, max_num_nodes=dataset.num_nodes).squeeze(dim=0)
 
-    train_adj = to_dense_adj(train_data.edge_index).squeeze(dim=0)
-    train_adj_norm = preprocess_graph(train_adj.cpu())
+    train_adj_norm = preprocess_graph(train_adj.cpu(), device=args.device)
+    val_adj_norm = preprocess_graph(val_adj.cpu(), device=args.device)
+
     print("Using {} dataset".format(args.dataset_str))
-    n_nodes, feat_dim = train_data.num_nodes, train_data.num_features
+    # n_nodes, feat_dim = train_data.num_nodes, train_data.num_features
+    n_nodes, feat_dim = dataset.num_nodes, dataset.num_features
     # Store original adjacency matrix (without diagonal entries) for later
     adj_orig = train_adj.cpu().detach().numpy()
     adj_orig = adj_orig - sp.dia_matrix((adj_orig.diagonal()[np.newaxis, :], [0]), shape=adj_orig.shape)
@@ -64,31 +69,39 @@ def gae(args):
         t = time.time()
         model.train()
         optimizer.zero_grad()
-        recovered, mu, logvar = model(train_data.x, train_adj_norm)
-        loss = loss_function(preds=recovered, labels=train_adj,
+        # recovered, mu, logvar = model(train_data.x, train_adj_norm)
+        recovered, mu, logvar = model(dataset.x, train_adj_norm)
+        loss = loss_function(preds=recovered, pos_labels=train_adj,
                              mu=mu, logvar=logvar, n_nodes=n_nodes,
-                             norm=norm, pos_weight=pos_weight)
+                             norm=norm, pos_weight=pos_weight, neg_labels=dataset.train_neg_adj_mask)
         loss.backward()
         cur_loss = loss.item()
         loss_trace.append(cur_loss)
         optimizer.step()
         hidden_emb = mu.data.cpu().detach().numpy()
-        roc_curr, ap_curr = get_roc_score(
-            hidden_emb, adj_orig, val_data.pos_edge_label_index, val_data.neg_edge_label_index
-        )
         if (epoch+1)%10 == 0:
+            model.eval()
+            recovered, mu, logvar = model(dataset.x, val_adj_norm)
+            val_loss = loss_function(preds=recovered, pos_labels=val_adj,
+                                 mu=mu, logvar=logvar, n_nodes=n_nodes,
+                                 norm=norm, pos_weight=pos_weight)
+
+            roc_curr, ap_curr = get_roc_score(
+                hidden_emb, adj_orig, dataset.val_pos_edge_index.t(), dataset.val_neg_edge_index.t()
+            )
             print("Epoch:", '%04d' % (epoch + 1), "train_loss=", "{:.5f}".format(cur_loss),
+                  "val_loss=", "{:.5f}".format(val_loss),
                   "val_ap=", "{:.5f}".format(ap_curr),
                   "time=", "{:.5f}".format(time.time() - t)
                   )
 
     print("Optimization Finished!")
-
     roc_score, ap_score = get_roc_score(
-        hidden_emb, adj_orig, test_data.pos_edge_label_index.t(), test_data.neg_edge_label_index.t()
+        hidden_emb, adj_orig, dataset.test_pos_edge_index.t(), dataset.test_neg_edge_index.t()
     )
     print('Test ROC score: ' + str(roc_score))
     print('Test AP score: ' + str(ap_score))
     return model
+
 
 gae(args)
