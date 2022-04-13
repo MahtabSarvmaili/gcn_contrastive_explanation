@@ -129,6 +129,7 @@ def main(gae_args, explainer_args):
         # Need to instantitate new cf model every time because size of P changes based on size of sub_adj
         explainer = CFExplainer(
             model=model,
+            graph_ae=graph_ae,
             sub_adj=sub_adj,
             sub_feat=sub_feat,
             n_hid=explainer_args.hidden,

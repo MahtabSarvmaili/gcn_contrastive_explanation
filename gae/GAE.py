@@ -11,22 +11,22 @@ from torch_geometric.datasets import Planetoid
 import torch_geometric.transforms as T
 from torch_geometric.utils import to_dense_adj, train_test_split_edges
 from gae.model import GCNModelVAE
-from gae.optimizer import loss_function
+from gae.loss import loss_function
 from gae.utils import load_data, mask_test_edges, preprocess_graph, get_roc_score
 torch.manual_seed(0)
 np.random.seed(0)
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--device', type=str, default='cuda', help='torch device.')
-parser.add_argument('--seed', type=int, default=42, help='Random seed.')
-parser.add_argument('--epochs', type=int, default=150, help='Number of epochs to train.')
-parser.add_argument('--hidden1', type=int, default=32, help='Number of units in hidden layer 1.')
-parser.add_argument('--hidden2', type=int, default=16, help='Number of units in hidden layer 2.')
-parser.add_argument('--lr', type=float, default=0.01, help='Initial learning rate.')
-parser.add_argument('--dropout', type=float, default=0., help='Dropout rate (1 - keep probability).')
-parser.add_argument('--dataset-str', type=str, default='cora', help='type of dataset.')
-
-args = parser.parse_args()
+# parser = argparse.ArgumentParser()
+# parser.add_argument('--device', type=str, default='cuda', help='torch device.')
+# parser.add_argument('--seed', type=int, default=42, help='Random seed.')
+# parser.add_argument('--epochs', type=int, default=150, help='Number of epochs to train.')
+# parser.add_argument('--hidden1', type=int, default=32, help='Number of units in hidden layer 1.')
+# parser.add_argument('--hidden2', type=int, default=16, help='Number of units in hidden layer 2.')
+# parser.add_argument('--lr', type=float, default=0.01, help='Initial learning rate.')
+# parser.add_argument('--dropout', type=float, default=0., help='Dropout rate (1 - keep probability).')
+# parser.add_argument('--dataset-str', type=str, default='cora', help='type of dataset.')
+#
+# args = parser.parse_args()
 
 
 def gae(args):
@@ -69,7 +69,6 @@ def gae(args):
         t = time.time()
         model.train()
         optimizer.zero_grad()
-        # recovered, mu, logvar = model(train_data.x, train_adj_norm)
         recovered, mu, logvar = model(dataset.x, train_adj_norm)
         loss = loss_function(preds=recovered, pos_labels=train_adj,
                              mu=mu, logvar=logvar, n_nodes=n_nodes,
@@ -102,6 +101,3 @@ def gae(args):
     print('Test ROC score: ' + str(roc_score))
     print('Test AP score: ' + str(ap_score))
     return model
-
-
-gae(args)

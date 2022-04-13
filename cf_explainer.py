@@ -10,8 +10,9 @@ import torch.optim as optim
 import matplotlib.pyplot as plt
 from torch.nn.utils import clip_grad_norm
 from utils import get_degree_matrix
+from gae.utils import preprocess_graph
 from gcn_perturb import GCNSyntheticPerturb
-from utils import normalize_adj
+
 torch.manual_seed(0)
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
@@ -21,11 +22,12 @@ class CFExplainer:
     CF Explainer class, returns counterfactual subgraph
     """
 
-    def __init__(self, model, sub_adj, sub_feat, n_hid, dropout,
+    def __init__(self, model, graph_ae, sub_adj, sub_feat, n_hid, dropout,
                  sub_labels, y_pred_orig, num_classes, beta, device, edge_additions=True, kappa=10):
         super(CFExplainer, self).__init__()
         self.model = model
         self.model.eval()
+        self.ae = graph_ae
         self.sub_adj = sub_adj
         self.sub_feat = sub_feat
         self.n_hid = n_hid
@@ -101,7 +103,7 @@ class CFExplainer:
         y_pred_new = torch.argmax(output[self.new_idx])
         y_pred_new_actual = torch.argmax(output_actual[self.new_idx])
         loss_total, loss_perturb, loss_graph_dist, cf_adj = self.cf_model.loss_pertinent_negative(
-            output[self.new_idx], self.y_pred_orig
+            output[self.new_idx], self.y_pred_orig, self.sub_adj
         )
 
         loss_total.backward()

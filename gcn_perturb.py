@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 from utils import get_degree_matrix, create_symm_matrix_from_vec, create_vec_from_symm_matrix
+from gae.utils import preprocess_graph
 from layers import GraphConvolution
 torch.manual_seed(0)
 
@@ -43,7 +44,7 @@ class GCNSyntheticPerturb(nn.Module):
 
     def __init__(
             self, nfeat, nhid, nout, nclass, adj, dropout,
-            beta, gamma=0.5, kappa=10, edge_additions=False, device='cuda'
+            beta, gamma=0.5, kappa=10, psi=0.0001, edge_additions=False, device='cuda'
     ):
         super(GCNSyntheticPerturb, self).__init__()
         self.adj = adj
@@ -56,6 +57,7 @@ class GCNSyntheticPerturb(nn.Module):
         self.beta = torch.tensor(beta).cuda()
         self.const = torch.zeros(1, requires_grad=True, device=device)
         self.gamma = torch.tensor(gamma, device=device)
+        self.psi = torch.tensor(psi, device=device)
         # P_hat needs to be symmetric ==>
         # learn vector representing entries in upper/lower triangular matrix and use to populate P_hat later
         self.P_vec_size = int((self.num_nodes * self.num_nodes - self.num_nodes) / 2) + self.num_nodes
@@ -171,7 +173,7 @@ class GCNSyntheticPerturb(nn.Module):
         loss_total = pred_same * loss_pred + self.beta * loss_graph_dist
         return loss_total, loss_pred, loss_graph_dist, cf_adj
 
-    def loss_pertinent_negative(self, output, y_pred_orig):
+    def loss_pertinent_negative(self, output, y_pred_orig, org_adj):
 
         pert_y_prob = output[y_pred_orig]
         weight = torch.ones(self.nclass).bool()
@@ -181,8 +183,11 @@ class GCNSyntheticPerturb(nn.Module):
         diff_y_noty = pert_y_prob - pert_noty_prob
         loss_perturb = torch.max(diff_y_noty, -self.kappa)
         cf_adj = self.P
-        cf_adj.requires_grad = True
+        norm_cf_adj = preprocess_graph(cf_adj.cpu(), device=self.device).to_dense()
+        norm_cf_adj.requires_grad = True
+
+        dist_l2_ae_recon = torch.dist(norm_cf_adj, org_adj)
         loss_graph_dist = sum(sum(abs(cf_adj - self.adj.cuda()))) / 2
         dist_l1 = self.P_hat_symm.abs().sum()
-        loss_total = loss_perturb + self.beta * loss_graph_dist + self.gamma*dist_l1
+        loss_total = loss_perturb + self.beta * loss_graph_dist + self.gamma*dist_l1 + self.psi*dist_l2_ae_recon
         return loss_total, loss_perturb, loss_graph_dist, self.P
