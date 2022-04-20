@@ -152,6 +152,62 @@ class GCNSyntheticPerturb(nn.Module):
         else:
             return F.softmax(x, dim=1)
 
+    def encode(self, x, sub_adj):
+        self.sub_adj = sub_adj
+        # Same as normalize_adj in utils.py except includes P_hat in A_tilde
+        self.P_hat_symm = create_symm_matrix_from_vec(self.P_vec, self.num_nodes)  # Ensure symmetry
+
+        A_tilde = torch.FloatTensor(self.num_nodes, self.num_nodes)
+        A_tilde.requires_grad = True
+
+        if self.edge_additions:  # Learn new adj matrix directly
+            A_tilde = F.sigmoid(self.P_hat_symm) + torch.eye(self.num_nodes).cuda()
+            # Use sigmoid to bound P_hat in [0,1]
+        else:  # Learn P_hat that gets multiplied element-wise with adj -- only edge deletions
+            A_tilde = F.sigmoid(self.P_hat_symm) * self.sub_adj.cuda() + torch.eye(
+                self.num_nodes).cuda()  # Use sigmoid to bound P_hat in [0,1]
+
+        D_tilde = get_degree_matrix(A_tilde).detach()  # Don't need gradient of this
+        # Raise to power -1/2, set all infs to 0s
+        D_tilde_exp = D_tilde ** (-1 / 2)
+        D_tilde_exp[torch.isinf(D_tilde_exp)] = 0
+
+        # Create norm_adj = (D + I)^(-1/2) * (A + I) * (D + I) ^(-1/2)
+        norm_adj = torch.mm(torch.mm(D_tilde_exp, A_tilde), D_tilde_exp)
+
+        x1 = F.relu(self.gc1(x, norm_adj))
+        x1 = F.dropout(x1, self.dropout, training=self.training)
+        x2 = F.relu(self.gc2(x1, norm_adj))
+        x2 = F.dropout(x2, self.dropout, training=self.training)
+        x3 = self.gc3(x2, norm_adj)
+        x = torch.cat((x1, x2, x3), dim=1)
+        return x
+
+    def encode_prediction(self, x):
+        # Same as forward but uses P instead of P_hat ==> non-differentiable
+        # but needed for actual predictions
+
+        self.P = (F.sigmoid(self.P_hat_symm) >= 0.5).float()  # threshold P_hat
+        if self.edge_additions:
+            A_tilde = self.P + torch.eye(self.num_nodes).cuda()
+        else:
+            A_tilde = self.P * self.adj + torch.eye(self.num_nodes).cuda()
+
+        D_tilde = get_degree_matrix(A_tilde)
+        # Raise to power -1/2, set all infs to 0s
+        D_tilde_exp = D_tilde ** (-1 / 2)
+        D_tilde_exp[torch.isinf(D_tilde_exp)] = 0
+
+        # Create norm_adj = (D + I)^(-1/2) * (A + I) * (D + I) ^(-1/2)
+        norm_adj = torch.mm(torch.mm(D_tilde_exp, A_tilde), D_tilde_exp)
+        x1 = F.relu(self.gc1(x, norm_adj))
+        x1 = F.dropout(x1, self.dropout, training=self.training)
+        x2 = F.relu(self.gc2(x1, norm_adj))
+        x2 = F.dropout(x2, self.dropout, training=self.training)
+        x3 = self.gc3(x2, norm_adj)
+        x = torch.cat((x1, x2, x3), dim=1)
+        return x
+
     def loss(self, output, y_pred_orig, y_pred_new_actual):
         pred_same = (y_pred_new_actual == y_pred_orig).float()
 

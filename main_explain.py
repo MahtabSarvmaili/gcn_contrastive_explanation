@@ -26,7 +26,7 @@ parser.add_argument('--epochs', type=int, default=200, help='Number of epochs to
 parser.add_argument('--hidden1', type=int, default=32, help='Number of units in hidden layer 1.')
 parser.add_argument('--hidden2', type=int, default=16, help='Number of units in hidden layer 2.')
 parser.add_argument('--lr', type=float, default=0.01, help='Initial learning rate.')
-parser.add_argument('--dropout', type=float, default=0., help='Dropout rate (1 - keep probability).')
+parser.add_argument('--dropout', type=float, default=0.5, help='Dropout rate (1 - keep probability).')
 parser.add_argument('--dataset-str', type=str, default='cora', help='type of dataset.')
 gae_args = parser.parse_args()
 
@@ -36,6 +36,7 @@ parser.add_argument('--bb-epochs', type=int, default=500, help='Number of epochs
 parser.add_argument('--cf-epochs', type=int, default=200, help='Number of epochs to train the ')
 parser.add_argument('--inputdim', type=int, default=10, help='Input dimension')
 parser.add_argument('--hidden', type=int, default=20, help='Number of units in hidden layer 1.')
+parser.add_argument('--n-layers', type=int, default=3, help='Number of units in hidden layer 1.')
 parser.add_argument('--lr', type=float, default=0.001, help='Initial learning rate.')
 parser.add_argument('--dropout', type=float, default=0.5, help='Dropout rate (1 - keep probability).')
 parser.add_argument('--cf-optimizer', type=str, default='SGD', help='Dropout rate (1 - keep probability).')
@@ -83,7 +84,7 @@ def main(gae_args, explainer_args):
         nhid=explainer_args.hidden,
         nout=explainer_args.hidden,
         nclasses=num_classes,
-        dropout=dropout
+        dropout=explainer_args.dropout
     )
     optimizer = torch.optim.Adam(model.parameters(), lr=explainer_args.lr, weight_decay=5e-4)
 
@@ -115,7 +116,7 @@ def main(gae_args, explainer_args):
     test_cf_examples = []
     for i in idx_test[:20]:
         sub_adj, sub_feat, sub_labels, node_dict = get_neighbourhood(
-            int(i), dataset.edge_index, n_layers + 1, features, labels)
+            int(i), dataset.edge_index, explainer_args.n_layers + 1, features, labels)
         new_idx = node_dict[int(i)]
         # Check that original model gives same prediction on full graph and subgraph
         with torch.no_grad():

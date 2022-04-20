@@ -30,6 +30,14 @@ class GCN(nn.Module):
         else:
             return F.softmax(x)
 
+    def encode(self, x, adj):
+        x1 = F.relu(self.gc1(x, adj))
+        x1 = F.dropout(x1, self.dropout, training=False)
+        x2 = F.relu(self.gc2(x1, adj))
+        x2 = F.dropout(x2, self.dropout, training=self.training)
+        x3 = self.gc3(x2, adj)
+        return torch.cat((x1, x2, x3), dim=1)
+
 
 def train(
         model:nn.Module,
