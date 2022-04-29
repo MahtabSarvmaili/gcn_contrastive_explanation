@@ -30,6 +30,27 @@ def prob_necessity(sub_feat, sub_adj, cf_examples, model, device='cuda'):
         print(f'Percentage of agreement Sparsed_CF and Sub_adj{(sub_node_y_pred != labels[j]).sum() / labels[0].__len__()}')
 
 
+def fidelity_size_sparsity(model, sub_feat, sub_adj, cf_examples):
+    fidelity_ = []
+    l1_dists = []
+    sparsity = []
+    b = model.forward(sub_feat, sub_adj, logit=False)
+    for i in range(len(cf_examples)):
+        cf_adj = torch.from_numpy(cf_examples[i][2]).cuda()
+        a = model.forward(sub_feat, cf_adj, logit=False)
+        c = (a.argmax(dim=1) == b.argmax(dim=1)).sum() / a.__len__()
+        d = (cf_adj <sub_adj).sum()/ sub_adj.sum()
+        fidelity_.append(c.cpu().numpy())
+        l1_dists.append(cf_examples[i])
+        sparsity.append(d)
+
+
+
+
+
+
+
+
 
 
 

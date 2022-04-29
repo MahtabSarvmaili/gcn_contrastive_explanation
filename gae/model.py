@@ -32,6 +32,11 @@ class GCNModelVAE(nn.Module):
         z = self.reparameterize(mu, logvar)
         return self.dc(z), mu, logvar
 
+    def reconstruct(self, x, adj):
+        mu, logvar = self.encode(x, adj)
+        z = self.reparameterize(mu, logvar)
+        return self.dc(z)
+
 
 class InnerProductDecoder(nn.Module):
     """Decoder for using inner product for prediction."""

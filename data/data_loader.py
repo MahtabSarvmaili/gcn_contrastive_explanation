@@ -50,7 +50,6 @@ def load_data(args):
     idx_test = np.arange(0, n_nodes)[test_mask.cpu()]
 
     return {
-        'dataset':dataset,
         'train_mask':train_mask,
         'val_mask':val_mask,
         'test_mask':test_mask,
@@ -60,6 +59,7 @@ def load_data(args):
         'adj':adj,
         'adj_norm':adj_norm,
         'adj_orig':adj_orig,
+        'edge_index':dataset.edge_index,
         'pos_weight':pos_weight,
         'norm':norm,
         'n_nodes':n_nodes,
@@ -87,13 +87,19 @@ def load_data_ae(args):
     adj_orig = train_adj.cpu().detach().numpy()
     adj_orig = adj_orig - sp.dia_matrix((adj_orig.diagonal()[np.newaxis, :], [0]), shape=adj_orig.shape)
     pos_weight = torch.Tensor([float(train_adj.shape[0] * train_adj.shape[0] - train_adj.sum()) / train_adj.sum()])
+    if args.device=='cuda':
+        pos_weight = pos_weight.cuda()
     norm = train_adj.shape[0] * train_adj.shape[0] / float((train_adj.shape[0] * train_adj.shape[0] - train_adj.sum()) * 2)
     return {
-        'dataset':dataset,
         'train_adj':train_adj,
         'train_adj_norm':train_adj_norm,
-        'val_adj':val_adj_norm,
+        'train_neg_adj_mask':dataset.train_neg_adj_mask,
+        'val_adj':val_adj,
         'val_adj_norm':val_adj_norm,
+        'val_pos_edge_index':dataset.val_pos_edge_index,
+        'val_neg_edge_index': dataset.val_neg_edge_index,
+        'test_pos_edge_index':dataset.test_pos_edge_index,
+        'test_neg_edge_index':dataset.test_neg_edge_index,
         'features':dataset.x,
         'labels':dataset.y,
         'adj_orig':adj_orig,

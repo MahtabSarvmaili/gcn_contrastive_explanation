@@ -8,7 +8,7 @@ import torch.nn.functional as F
 import numpy as np
 import torch.optim as optim
 import matplotlib.pyplot as plt
-from torch.nn.utils import clip_grad_norm
+from torch.nn.utils import clip_grad_norm_
 from utils import get_degree_matrix
 from gae.utils import preprocess_graph
 from gcn_perturb import GCNSyntheticPerturb
@@ -22,12 +22,15 @@ class CFExplainer:
     CF Explainer class, returns counterfactual subgraph
     """
 
-    def __init__(self, model, graph_ae, sub_adj, sub_feat, n_hid, dropout,
+    def __init__(self, model, graph_ae, cluster, sub_adj, sub_feat, n_hid, dropout,
                  sub_labels, y_pred_orig, num_classes, beta, device, edge_additions=True, kappa=10):
         super(CFExplainer, self).__init__()
         self.model = model
         self.model.eval()
-        self.ae = graph_ae
+        self.graph_AE = graph_ae
+        self.graph_AE.eval()
+        self.cluster = cluster
+        self.cluster.eval()
         self.sub_adj = sub_adj
         self.sub_feat = sub_feat
         self.n_hid = n_hid
@@ -54,24 +57,23 @@ class CFExplainer:
         for name, param in self.cf_model.named_parameters():
             print("cf model required_grad: ", name, param.requires_grad)
 
-    def train(self, epoch):
+    def train_cf_model(self):
         self.cf_model.train()
         self.cf_optimizer.zero_grad()
-
-        # output uses differentiable P_hat ==> adjacency matrix not binary, but needed for training
-        # output_actual uses thresholded P ==> binary adjacency matrix ==> gives actual prediction
-        output = self.cf_model.forward(self.x, self.A_x)
-        output_actual, self.P = self.cf_model.forward_prediction(self.x)
-
-        # Need to use new_idx from now on since sub_adj is reindexed
+        output = self.cf_model.forward(self.x, self.A_x, logits=False)
+        output_actual = self.cf_model.forward_prediction(self.x, logits=False)
         y_pred_new = torch.argmax(output[self.new_idx])
         y_pred_new_actual = torch.argmax(output_actual[self.new_idx])
+        return output, output_actual, y_pred_new, y_pred_new_actual
 
+    def train(self, epoch):
+
+        output, output_actual, y_pred_new, y_pred_new_actual = self.train_cf_model()
         loss_total, loss_pred, loss_graph_dist, cf_adj = self.cf_model.loss(
             output[self.new_idx], self.y_pred_orig,y_pred_new_actual
         )
         loss_total.backward()
-        clip_grad_norm(self.cf_model.parameters(), 2.0)
+        clip_grad_norm_(self.cf_model.parameters(), 2.0)
         self.cf_optimizer.step()
         print('Node idx: {}'.format(self.node_idx),
               'New idx: {}'.format(self.new_idx),
@@ -87,27 +89,27 @@ class CFExplainer:
         cf_stats = []
         if y_pred_new_actual != self.y_pred_orig:
             cf_stats = [self.node_idx.item(), self.new_idx.item(),
-                        cf_adj.detach().numpy(), self.sub_adj.detach().numpy(),
+                        cf_adj.cpu().detach().numpy(), self.sub_adj.cpu().detach().numpy(),
                         self.y_pred_orig.item(), y_pred_new.item(),
-                        y_pred_new_actual.item(), self.sub_labels[self.new_idx].numpy(),
+                        y_pred_new_actual.item(), self.sub_labels[self.new_idx].cpu().numpy(),
                         self.sub_adj.shape[0], loss_total.item(),
                         loss_pred.item(), loss_graph_dist.item()]
 
         return (cf_stats, loss_total.item())
 
-    def train_model_pn(self, epoch):
-        self.cf_model.train()
-        self.cf_optimizer.zero_grad()
-        output = self.cf_model.forward(self.x, self.A_x, logits=False)
-        output_actual = self.cf_model.forward_prediction(self.x, logits=False)
-        y_pred_new = torch.argmax(output[self.new_idx])
-        y_pred_new_actual = torch.argmax(output_actual[self.new_idx])
-        loss_total, loss_perturb, loss_graph_dist, cf_adj = self.cf_model.loss_pertinent_negative(
-            output[self.new_idx], self.y_pred_orig, self.sub_adj
+    def train_cf_model_pn(self, epoch, encode_sub_features):
+        output, output_actual, y_pred_new, y_pred_new_actual = self.train_cf_model()
+        # loss_total, loss_perturb, loss_graph_dist, cf_adj = self.cf_model.loss_PN_L1_L2(
+        #     output[self.new_idx], self.y_pred_orig, self.sub_adj
+        # )
+        loss_total, loss_perturb, loss_graph_dist, cf_adj = self.cf_model.loss_PN_AE_L1_L2(
+            self.graph_AE, self.sub_feat, output[self.new_idx], self.y_pred_orig, self.sub_adj
         )
-
+        # loss_total, loss_perturb, loss_graph_dist, cf_adj = self.cf_model.loss_PN_CLUSTER(
+        #     self.cluster, self.sub_feat, encode_sub_features, output[self.new_idx], self.y_pred_orig, self.sub_adj, self.node_idx
+        # )
         loss_total.backward()
-        clip_grad_norm(self.cf_model.parameters(), 2.0)
+        clip_grad_norm_(self.cf_model.parameters(), 2.0)
         self.cf_optimizer.step()
         if epoch%50 == 0 and epoch != 0:
             print('Node idx: {}'.format(self.node_idx),
@@ -127,7 +129,7 @@ class CFExplainer:
                         self.sub_adj.shape[0], loss_total.item(), loss_perturb.item(), loss_graph_dist.item()]
         return cf_stats, loss_total
 
-    def explain(self, cf_optimizer, node_idx, new_idx, lr, n_momentum, num_epochs, PN_training=True):
+    def explain(self, cf_optimizer, node_idx, new_idx, lr, n_momentum, num_epochs, encode_sub_features, PN_training=True):
         self.node_idx = node_idx
         self.new_idx = new_idx
 
@@ -149,7 +151,7 @@ class CFExplainer:
         num_cf_examples = 0
         for epoch in range(num_epochs):
             if PN_training:
-                new_example, loss_total = self.train_model_pn(epoch)
+                new_example, loss_total = self.train_cf_model_pn(epoch, encode_sub_features)
                 if new_example != [] and loss_total < best_loss:
                     best_cf_example.append(new_example)
                     best_loss = loss_total
@@ -163,7 +165,7 @@ class CFExplainer:
                 total_loss_.append(loss_total)
                 loss_ = loss_total
 
-        print("{} CF examples for node_idx = {}".format(num_cf_examples, self.node_idx))
-        print(" ")
+        # print("{} CF examples for node_idx = {}".format(num_cf_examples, self.node_idx))
+        # print(" ")
         return (best_cf_example)
 

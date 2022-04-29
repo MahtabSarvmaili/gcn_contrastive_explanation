@@ -15,6 +15,8 @@ def loss_function(preds, pos_labels, mu, logvar, n_nodes, norm, pos_weight, neg_
         1 + 2 * logvar - mu.pow(2) - logvar.exp().pow(2), 1))
     return cost + KLD
 
+
 def recons_loss(preds, pos_labels):
     cost = F.binary_cross_entropy_with_logits(preds, pos_labels)
+    return cost
 

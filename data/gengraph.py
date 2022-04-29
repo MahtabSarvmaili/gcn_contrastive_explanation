@@ -23,6 +23,9 @@ import data.featgen as featgen
 import data.io_utils as io_utils
 
 
+import os
+
+os.environ['KMP_DUPLICATE_LIB_OK']='True'
 ####################################
 #
 # Experiment utilities
@@ -293,7 +296,9 @@ def save_gen_graph(G, labels, path=None):
             adjacency_mrx[dt[0], x] = 1
     idxs = np.arange(0, num_nodes)
     train_idx = np.random.choice(idxs, int(num_nodes*0.7))
+    val_idx = np.random.choice(np.delete(idxs, train_idx), int(len(idxs)*0.1))
     test_idx = np.random.permutation(np.delete(idxs, train_idx))
+
 
     dt = {
         'adj': adjacency_mrx,
@@ -305,3 +310,9 @@ def save_gen_graph(G, labels, path=None):
     if path is not None:
         pickle.dump(dt, path)
     return dt
+
+
+
+
+G, role_id, name = gen_syn2()
+preprocess_input_graph(G, role_id)

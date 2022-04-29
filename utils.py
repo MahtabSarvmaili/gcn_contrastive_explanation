@@ -126,7 +126,7 @@ def get_neighbourhood(node_idx, edge_index, n_hops, features, labels):
     new_index = np.array([i for i in range(len(edge_subset[0]))])
     node_dict = dict(zip(edge_subset[0].cpu().numpy(), new_index))  # Maps orig labels to new
     # print("Num nodes in subgraph: {}".format(len(edge_subset[0])))
-    return sub_adj, sub_feat, sub_labels, node_dict
+    return sub_adj, sub_feat, sub_labels, node_dict, edge_subset[1]
 
 
 def create_symm_matrix_from_vec(vector, n_rows):

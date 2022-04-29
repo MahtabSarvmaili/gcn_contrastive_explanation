@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 from utils import get_degree_matrix, create_symm_matrix_from_vec, create_vec_from_symm_matrix
 from gae.utils import preprocess_graph
+from clustering.dmon import DMoN
 from layers import GraphConvolution
 torch.manual_seed(0)
 
@@ -229,7 +230,25 @@ class GCNSyntheticPerturb(nn.Module):
         loss_total = pred_same * loss_pred + self.beta * loss_graph_dist
         return loss_total, loss_pred, loss_graph_dist, cf_adj
 
-    def loss_pertinent_negative(self, output, y_pred_orig, org_adj):
+    def loss_PN_L1_L2(self, output, y_pred_orig, org_adj):
+
+        pert_y_prob = output[y_pred_orig]
+        weight = torch.ones(self.nclass).bool()
+        weight[y_pred_orig] = False
+        pert_noty_prob = output[weight].max()
+
+        diff_y_noty = pert_y_prob - pert_noty_prob
+        loss_perturb = torch.max(diff_y_noty, -self.kappa)
+
+        cf_adj = self.P
+        cf_adj.requires_grad = True
+        dist_l2_dist = torch.dist(cf_adj, org_adj)
+        loss_graph_dist = sum(sum(abs(cf_adj - self.adj.cuda()))) / 2
+        dist_l1 = self.P_hat_symm.abs().sum()
+        loss_total = loss_perturb + self.beta * loss_graph_dist + self.gamma*dist_l1 + self.psi*dist_l2_dist
+        return loss_total, loss_perturb, loss_graph_dist, self.P
+
+    def loss_PN_AE_L1_L2(self, graph_AE, x, output, y_pred_orig, org_adj):
 
         pert_y_prob = output[y_pred_orig]
         weight = torch.ones(self.nclass).bool()
@@ -239,11 +258,35 @@ class GCNSyntheticPerturb(nn.Module):
         diff_y_noty = pert_y_prob - pert_noty_prob
         loss_perturb = torch.max(diff_y_noty, -self.kappa)
         cf_adj = self.P
-        norm_cf_adj = preprocess_graph(cf_adj.cpu(), device=self.device).to_dense()
-        norm_cf_adj.requires_grad = True
+        cf_adj.requires_grad = True
+        norm_cf_adj = preprocess_graph(cf_adj.cpu().detach(), device=self.device).to_dense()
 
-        dist_l2_ae_recon = torch.dist(norm_cf_adj, org_adj)
+        reconst_P = graph_AE.reconstruct(x, norm_cf_adj)
+        l2_AE = torch.dist(reconst_P, cf_adj)
+
+        dist_l2_dist = torch.dist(norm_cf_adj, org_adj)
         loss_graph_dist = sum(sum(abs(cf_adj - self.adj.cuda()))) / 2
         dist_l1 = self.P_hat_symm.abs().sum()
-        loss_total = loss_perturb + self.beta * loss_graph_dist + self.gamma*dist_l1 + self.psi*dist_l2_ae_recon
+        loss_total = loss_perturb + self.beta * loss_graph_dist + self.gamma*dist_l1 + self.psi*dist_l2_dist + l2_AE
+        return loss_total, loss_perturb, loss_graph_dist, self.P
+
+    def loss_PN_CLUSTER(self, cluster:DMoN, x, encode_x, output, y_pred_orig, org_adj, node_idx):
+        features_bf, org_assignment = cluster(encode_x)
+        org_assignment = org_assignment.argmax(dim=1)
+        cf_adj = self.P
+        norm_cf_adj = preprocess_graph(cf_adj.cpu(), device=self.device).to_dense()
+        cf_adj.requires_grad = True
+        x = self.encode(x, cf_adj)
+        features_af, assignment = cluster(x)
+        pert_y_prob = output[y_pred_orig]
+        weight = torch.ones(self.nclass).bool()
+        weight[y_pred_orig] = False
+        pert_noty_prob = output[weight].max()
+
+        diff_y_noty = pert_y_prob - pert_noty_prob
+        loss_perturb = torch.max(diff_y_noty, -self.kappa)
+        dist_l2_dist = torch.dist(norm_cf_adj, org_adj)
+        loss_graph_dist = sum(sum(abs(cf_adj - self.adj.cuda()))) / 2
+        dist_l1 = self.P_hat_symm.abs().sum()
+        loss_total = loss_perturb + self.beta * loss_graph_dist + self.gamma*dist_l1 + self.psi*dist_l2_dist
         return loss_total, loss_perturb, loss_graph_dist, self.P
