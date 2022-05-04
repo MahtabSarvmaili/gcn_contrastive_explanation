@@ -82,10 +82,9 @@ def preprocess_input_graph(G, labels, normalize_adj=False):
     Returns:
         A dictionary containing adjacency, node features and labels
     """
-    adj = np.array(nx.to_numpy_matrix(G))
-    if normalize_adj:
-        sqrt_deg = np.diag(1.0 / np.sqrt(np.sum(adj, axis=0, dtype=float).squeeze()))
-        adj = np.matmul(np.matmul(sqrt_deg, adj), sqrt_deg)
+    org_adj = np.array(nx.to_numpy_matrix(G))
+    sqrt_deg = np.diag(1.0 / np.sqrt(np.sum(org_adj, axis=0, dtype=float).squeeze()))
+    adj = np.matmul(np.matmul(sqrt_deg, org_adj), sqrt_deg)
 
     existing_node = list(G.nodes)[-1]
     feat_dim = G.nodes[existing_node]["feat"].shape[0]
@@ -94,10 +93,10 @@ def preprocess_input_graph(G, labels, normalize_adj=False):
         f[i, :] = G.nodes[u]["feat"]
 
     # add batch dim
-    adj = np.expand_dims(adj, axis=0)
-    f = np.expand_dims(f, axis=0)
-    labels = np.expand_dims(labels, axis=0)
-    return {"adj": adj, "feat": f, "labels": labels}
+    # adj = np.expand_dims(adj, axis=0)
+    # f = np.expand_dims(f, axis=0)
+    # labels = np.expand_dims(labels, axis=0)
+    return {"adj": adj, "feat": f, "labels": labels, "org_adj":org_adj}
 
 
 ####################################
@@ -305,14 +304,9 @@ def save_gen_graph(G, labels, path=None):
         'feat': features_mrx,
         'labels':labels,
         'train_idx':train_idx,
-        'test_idx':test_idx
+        'test_idx':test_idx,
+        'val_idx':val_idx
     }
     if path is not None:
         pickle.dump(dt, path)
     return dt
-
-
-
-
-G, role_id, name = gen_syn2()
-preprocess_input_graph(G, role_id)

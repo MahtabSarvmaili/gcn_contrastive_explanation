@@ -5,6 +5,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from layers import GraphConvolution
 from utils import accuracy
+from clustering.visualization import simple_plot
 torch.manual_seed(0)
 np.random.seed(0)
 
@@ -47,9 +48,13 @@ def train(
         train_mask,
         optimizer: optim,
         epoch,
-        val_mask
+        val_mask,
+        dataset_name=''
 ):
     model.train()
+    loss_tr_ = []
+    loss_val_ = []
+    epochs_ = []
     for i in range(epoch):
         optimizer.zero_grad()
         preds = model.forward(features, train_adj)
@@ -58,7 +63,7 @@ def train(
         loss_train.backward()
         optimizer.step()
 
-        if i%100==0 and i!=0:
+        if i%10==0 and i!=0:
             model.eval()
             preds = model(features, train_adj)
             loss_val = F.nll_loss(preds[val_mask], labels[val_mask])
@@ -68,7 +73,12 @@ def train(
                   'acc_train: {:.4f}'.format(acc_train.item()),
                   'loss_val: {:.4f}'.format(loss_val.item()),
                   'acc_val: {:.4f}'.format(acc_val.item()))
-
+            loss_tr_.append(loss_train.cpu().detach().numpy())
+            loss_val_.append(loss_val.cpu().detach().numpy())
+            epochs_.append(i)
+    simple_plot(
+        x=epochs_, y=[loss_tr_, loss_val_], labels=["train_loss", "val_loss"], name=f'cgn_train_val_loss_{dataset_name}'
+    )
 
 def test(
         model: nn.Module,

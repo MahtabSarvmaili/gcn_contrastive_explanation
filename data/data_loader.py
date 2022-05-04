@@ -8,10 +8,13 @@ import pickle
 import os.path as osp
 import scipy.sparse as sp
 
-from torch_geometric.utils import to_dense_adj, train_test_split_edges
+from torch_geometric.utils import to_dense_adj, train_test_split_edges, dense_to_sparse
 from torch_geometric.datasets import Planetoid
 import torch_geometric.transforms as T
+from torch_geometric.data import Data
 from gae.utils import preprocess_graph
+from utils import normalize, normalize_adj, sparse_mx_to_torch_sparse_tensor
+from data.gengraph import gen_syn1, preprocess_input_graph
 torch.manual_seed(0)
 np.random.seed(0)
 
@@ -109,3 +112,43 @@ def load_data_ae(args):
         'feat_dim':dataset.num_features,
         'num_classes':len(dataset.y.unique())
     }
+
+
+def load_synthetic_data(gen_syn_func, device='cuda'):
+    G, role_id, name = gen_syn_func()
+    data = preprocess_input_graph(G, role_id, name)
+    org_adj = torch.tensor(data['org_adj'])
+    adj = torch.tensor(data['adj'], dtype=torch.float32)
+
+    edge_index = dense_to_sparse(adj)[0]
+    features = normalize(data['feat'])
+    features = torch.FloatTensor(np.array(features))
+    labels = torch.LongTensor(data['labels'])
+    dt = Data(x=features,edge_index=edge_index,y=labels)
+    transform = T.Compose([
+        T.NormalizeFeatures(),
+        T.ToDevice(device),
+        T.RandomNodeSplit(num_val=0.1, num_test=0.2),
+    ])
+    dataset = transform(dt)
+    if device == 'cuda':
+        adj = adj.cuda()
+        org_adj = org_adj.cuda()
+
+    return {
+        'train_mask':dt.train_mask,
+        'val_mask':dt.val_mask,
+        'test_mask':dt.test_mask,
+        'idx_test':np.arange(dataset.num_nodes)[dt.test_mask],
+        'features':dataset.x,
+        'labels':dataset.y,
+        'adj':org_adj,
+        'adj_norm':adj,
+        'adj_orig':np.matrix(data['adj']),
+        'edge_index':dataset.edge_index,
+        'n_nodes':dataset.num_nodes,
+        'feat_dim':dataset.num_features,
+        'num_classes':len(dataset.y.unique())
+    }
+
+
