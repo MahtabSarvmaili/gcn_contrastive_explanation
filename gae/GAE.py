@@ -6,17 +6,11 @@ import numpy as np
 import scipy.sparse as sp
 import torch
 from torch import optim
-import os.path as osp
-from torch_geometric.datasets import Planetoid
-import torch_geometric.transforms as T
-from torch_geometric.utils import to_dense_adj, train_test_split_edges
 from gae.model import GCNModelVAE
 from gae.loss import loss_function
-from gae.utils import load_data, mask_test_edges, preprocess_graph, get_roc_score
-from data.data_loader import load_data_AE
+from gae.utils import get_roc_score
 torch.manual_seed(0)
 np.random.seed(0)
-
 
 
 def gae(args, data):
