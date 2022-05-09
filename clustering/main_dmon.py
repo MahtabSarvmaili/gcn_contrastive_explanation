@@ -4,12 +4,12 @@ import torch
 import numpy as np
 import sklearn
 import clustering.metrics as metrics
-from clustering.visualization import simple_plot
+from visualization import simple_plot
 torch.manual_seed(0)
 np.random.seed(0)
 
 
-def DMon(data, model, num_clusters, lr, dataset_name=''):
+def DMon(data, model, num_clusters, epochs, lr,dataset_name=''):
     model.eval()
 
     dmon = DMoN(data['cluster_features'].shape[1], n_clusters=num_clusters)
@@ -19,7 +19,7 @@ def DMon(data, model, num_clusters, lr, dataset_name=''):
     modularity_ = []
     f1_ = []
     epochs_=[]
-    for i in range(4000):
+    for i in range(epochs):
         dmon.train()
         optimizer.zero_grad()
         if data['adj_norm'].is_sparse:
@@ -29,7 +29,7 @@ def DMon(data, model, num_clusters, lr, dataset_name=''):
         loss.backward()
         optimizer.step()
 
-        if i%100==0 and i!=0:
+        if i%10==0 and i!=0:
             epochs_.append(i)
             print(f'epoch {i}, loss: {loss}')
             print('Num of dt instances:', Counter(data['labels'].cpu().numpy()))

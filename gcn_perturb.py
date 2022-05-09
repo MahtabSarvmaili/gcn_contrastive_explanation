@@ -244,7 +244,7 @@ class GCNSyntheticPerturb(nn.Module):
         cf_adj.requires_grad = True
         dist_l2_dist = torch.dist(cf_adj, org_adj)
         loss_graph_dist = sum(sum(abs(cf_adj - self.adj.cuda()))) / 2
-        dist_l1 = self.P_hat_symm.abs().sum()
+        dist_l1 = cf_adj.abs().sum()
         loss_total = loss_perturb + self.beta * loss_graph_dist + self.gamma*dist_l1 + self.psi*dist_l2_dist
         return loss_total, loss_perturb, loss_graph_dist, self.P
 
@@ -266,8 +266,9 @@ class GCNSyntheticPerturb(nn.Module):
 
         dist_l2_dist = torch.dist(norm_cf_adj, org_adj)
         loss_graph_dist = sum(sum(abs(cf_adj - self.adj.cuda()))) / 2
-        dist_l1 = self.P_hat_symm.abs().sum()
-        loss_total = loss_perturb + self.beta * loss_graph_dist + self.gamma*dist_l1 + self.psi*dist_l2_dist + l2_AE
+        dist_l1 = cf_adj.abs().sum()
+        loss_total = loss_perturb + self.beta * loss_graph_dist + \
+                     self.gamma*dist_l1 + self.psi*dist_l2_dist + self.gamma*l2_AE
         return loss_total, loss_perturb, loss_graph_dist, self.P
 
     def loss_PN_CLUSTER(self, cluster:DMoN, x, encode_x, output, y_pred_orig, org_adj, node_idx):

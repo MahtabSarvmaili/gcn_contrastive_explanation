@@ -3,16 +3,18 @@ import argparse
 import numpy as np
 import torch
 from clustering.main_dmon import DMon
-from clustering.visualization import plotClusters
+from visualization import plotClusters
 from model import GCN, train
-from data.gengraph import gen_syn1, gen_syn2, gen_syn3, gen_syn4, gen_syn5
-from data.data_loader import load_synthetic_data
+from data.gengraph import gen_syn1
+from data.data_loader import load_synthetic, load_data
+
 np.random.seed(0)
 torch.manual_seed(0)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--device', type=str, default='cuda', help='torch device.')
-parser.add_argument('--bb-epochs', type=int, default=350, help='Number of epochs to train bb')
+parser.add_argument('--bb-epochs', type=int, default=400, help='Number of epochs to train bb')
+parser.add_argument('--dmon-epochs', type=int, default=1000, help='Number of epochs to train bb')
 parser.add_argument('--hidden', type=int, default=20, help='Number of units in hidden layer 1.')
 parser.add_argument('--n-layers', type=int, default=3, help='Number of units in hidden layer 1.')
 parser.add_argument('--lr', type=float, default=0.001, help='Initial learning rate.')
@@ -25,8 +27,11 @@ explainer_args = parser.parse_args()
 
 
 def main(explainer_args):
-    dataset_name = gen_syn2.__name__
-    data = load_synthetic_data(gen_syn2, 'cuda')
+
+    # dataset_name = gen_syn1.__name__
+    # data = load_synthetic(gen_syn1, 'cuda')
+    data = load_data(explainer_args)
+    dataset_name = 'cora'
     model = GCN(
         nfeat=data['feat_dim'],
         nhid=explainer_args.hidden,
@@ -59,22 +64,20 @@ def main(explainer_args):
     print("Training GNN is finished.")
 
     print("Training clustering model:")
-    dmon = DMon(data, model, 16, explainer_args.dmon_lr, dataset_name)
+    dmon = DMon(data, model, 16, explainer_args.dmon_epochs, explainer_args.dmon_lr, dataset_name)
     cluster_features, assignments = dmon(data['cluster_features'])
     plotClusters(
         data['cluster_features'].cpu(),
         data['labels'].cpu(),
         cluster_features.cpu().detach(),
-        f'gen_syn2_org_dt_{dataset_name}'
+        f'org_dt_{dataset_name}'
     )
     plotClusters(
         data['cluster_features'].cpu(),
         assignments.argmax(dim=1).cpu(),
         cluster_features.cpu().detach(),
-        f'gen_syn2_clus_dt_{dataset_name}'
+        f'clus_dt_{dataset_name}'
     )
-    print('yes')
-
 
 if __name__ == '__main__':
     main(explainer_args)

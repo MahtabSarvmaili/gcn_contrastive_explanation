@@ -25,6 +25,40 @@ def __load__planetoid__(dataset_str, transformer):
     return dataset
 
 
+def __prepare_edge_class_dataset__(dataset, device):
+    dataset = train_test_split_edges(dataset)
+    train_adj = to_dense_adj(dataset.train_pos_edge_index).squeeze(dim=0)
+    val_adj = to_dense_adj(dataset.val_pos_edge_index, max_num_nodes=dataset.num_nodes).squeeze(dim=0)
+
+    train_adj_norm = preprocess_graph(train_adj.cpu(), device=device)
+    val_adj_norm = preprocess_graph(val_adj.cpu(), device=device)
+    adj_orig = train_adj.cpu().detach().numpy()
+    adj_orig = adj_orig - sp.dia_matrix((adj_orig.diagonal()[np.newaxis, :], [0]), shape=adj_orig.shape)
+    pos_weight = torch.Tensor([float(train_adj.shape[0] * train_adj.shape[0] - train_adj.sum()) / train_adj.sum()])
+    if device=='cuda':
+        pos_weight = pos_weight.cuda()
+    norm = train_adj.shape[0] * train_adj.shape[0] / float((train_adj.shape[0] * train_adj.shape[0] - train_adj.sum()) * 2)
+
+    return {
+        'train_adj':train_adj,
+        'train_adj_norm':train_adj_norm,
+        'train_neg_adj_mask':dataset.train_neg_adj_mask,
+        'val_adj':val_adj,
+        'val_adj_norm':val_adj_norm,
+        'val_pos_edge_index':dataset.val_pos_edge_index,
+        'val_neg_edge_index': dataset.val_neg_edge_index,
+        'test_pos_edge_index':dataset.test_pos_edge_index,
+        'test_neg_edge_index':dataset.test_neg_edge_index,
+        'features':dataset.x,
+        'labels':dataset.y,
+        'adj_orig':adj_orig,
+        'pos_weight':pos_weight,
+        'norm':norm,
+        'n_nodes':dataset.num_nodes,
+        'feat_dim':dataset.num_features,
+        'num_classes':len(dataset.y.unique())
+    }
+
 def load_data(args):
     transform = T.Compose([
         T.NormalizeFeatures(),
@@ -71,50 +105,17 @@ def load_data(args):
     }
 
 
-def load_data_ae(args):
+def load_data_AE(args):
     transform = T.Compose([
         T.NormalizeFeatures(),
         T.ToDevice(args.device),
     ])
     dataset = __load__planetoid__(args.dataset_str, transform)
     dataset.train_mask = dataset.test_mask = dataset.val_mask = None
-    dataset = train_test_split_edges(dataset)
-    train_adj = to_dense_adj(dataset.train_pos_edge_index).squeeze(dim=0)
-    val_adj = to_dense_adj(dataset.val_pos_edge_index, max_num_nodes=dataset.num_nodes).squeeze(dim=0)
-
-    train_adj_norm = preprocess_graph(train_adj.cpu(), device=args.device)
-    val_adj_norm = preprocess_graph(val_adj.cpu(), device=args.device)
-
-    print("Using {} dataset".format(args.dataset_str))
-    # Store original adjacency matrix (without diagonal entries) for later
-    adj_orig = train_adj.cpu().detach().numpy()
-    adj_orig = adj_orig - sp.dia_matrix((adj_orig.diagonal()[np.newaxis, :], [0]), shape=adj_orig.shape)
-    pos_weight = torch.Tensor([float(train_adj.shape[0] * train_adj.shape[0] - train_adj.sum()) / train_adj.sum()])
-    if args.device=='cuda':
-        pos_weight = pos_weight.cuda()
-    norm = train_adj.shape[0] * train_adj.shape[0] / float((train_adj.shape[0] * train_adj.shape[0] - train_adj.sum()) * 2)
-    return {
-        'train_adj':train_adj,
-        'train_adj_norm':train_adj_norm,
-        'train_neg_adj_mask':dataset.train_neg_adj_mask,
-        'val_adj':val_adj,
-        'val_adj_norm':val_adj_norm,
-        'val_pos_edge_index':dataset.val_pos_edge_index,
-        'val_neg_edge_index': dataset.val_neg_edge_index,
-        'test_pos_edge_index':dataset.test_pos_edge_index,
-        'test_neg_edge_index':dataset.test_neg_edge_index,
-        'features':dataset.x,
-        'labels':dataset.y,
-        'adj_orig':adj_orig,
-        'pos_weight':pos_weight,
-        'norm':norm,
-        'n_nodes':dataset.num_nodes,
-        'feat_dim':dataset.num_features,
-        'num_classes':len(dataset.y.unique())
-    }
+    return __prepare_edge_class_dataset__(dataset, args.device)
 
 
-def load_synthetic_data(gen_syn_func, device='cuda'):
+def load_synthetic(gen_syn_func, device='cuda'):
     G, role_id, name = gen_syn_func()
     data = preprocess_input_graph(G, role_id, name)
     org_adj = torch.tensor(data['org_adj'])
@@ -131,6 +132,7 @@ def load_synthetic_data(gen_syn_func, device='cuda'):
         T.RandomNodeSplit(num_val=0.1, num_test=0.2),
     ])
     dataset = transform(dt)
+
     if device == 'cuda':
         adj = adj.cuda()
         org_adj = org_adj.cuda()
@@ -152,3 +154,18 @@ def load_synthetic_data(gen_syn_func, device='cuda'):
     }
 
 
+def load_synthetic_AE(gen_syn_func, device='cuda'):
+    G, role_id, name = gen_syn_func()
+    data = preprocess_input_graph(G, role_id, name)
+    adj = torch.tensor(data['adj'], dtype=torch.float32)
+    edge_index = dense_to_sparse(adj)[0]
+    features = data['feat']
+    features = torch.FloatTensor(np.array(features))
+    labels = torch.LongTensor(data['labels'])
+    dt = Data(x=features,edge_index=edge_index,y=labels)
+    transform = T.Compose([
+        T.NormalizeFeatures(),
+        T.ToDevice(device),
+    ])
+    dataset = transform(dt)
+    return __prepare_edge_class_dataset__(dataset, device)

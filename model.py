@@ -5,7 +5,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from layers import GraphConvolution
 from utils import accuracy
-from clustering.visualization import simple_plot
+from visualization import simple_plot
 torch.manual_seed(0)
 np.random.seed(0)
 

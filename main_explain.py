@@ -4,7 +4,8 @@ import sys
 sys.path.append('../..')
 import torch
 import numpy as np
-from data.data_loader import load_data, load_data_ae
+from data.data_loader import load_data, load_synthetic, load_synthetic_AE
+from data.gengraph import gen_syn2
 from utils import normalize_adj, get_neighbourhood
 from model import GCN, train
 from cf_explainer import CFExplainer
@@ -15,7 +16,7 @@ np.random.seed(0)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--device', type=str, default='cuda', help='torch device.')
-parser.add_argument('--epochs', type=int, default=200, help='Number of epochs to train.')
+parser.add_argument('--epochs', type=int, default=50, help='Number of epochs to train.')
 parser.add_argument('--hidden1', type=int, default=32, help='Number of units in hidden layer 1.')
 parser.add_argument('--hidden2', type=int, default=16, help='Number of units in hidden layer 2.')
 parser.add_argument('--lr', type=float, default=0.01, help='Initial learning rate.')
@@ -32,6 +33,7 @@ parser.add_argument('--hidden', type=int, default=20, help='Number of units in h
 parser.add_argument('--n-layers', type=int, default=3, help='Number of units in hidden layer 1.')
 parser.add_argument('--lr', type=float, default=0.001, help='Initial learning rate.')
 parser.add_argument('--dmon-lr', type=float, default=0.001, help='Initial learning rate.')
+parser.add_argument('--dmon-epochs', type=int, default=1000, help='Number of epochs to train bb')
 parser.add_argument('--n-clusters', type=int, default=16, help='Maximum number of Clusters.')
 parser.add_argument('--dropout', type=float, default=0.5, help='Dropout rate (1 - keep probability).')
 parser.add_argument('--cf-optimizer', type=str, default='SGD', help='Dropout rate (1 - keep probability).')
@@ -43,12 +45,8 @@ explainer_args = parser.parse_args()
 
 
 def main(gae_args, explainer_args):
-    inputdim = 10
-    hidden = 20
-    dropout = 0.5
-    n_layers = 3
-
-    data =load_data(explainer_args)
+    data =load_synthetic(gen_syn2, device=explainer_args.device)
+    data_AE = load_synthetic_AE(gen_syn2, device=explainer_args.device)
     model = GCN(
         nfeat=data['feat_dim'],
         nhid=explainer_args.hidden,
@@ -61,23 +59,6 @@ def main(gae_args, explainer_args):
     if explainer_args.device=='cuda':
         model = model.cuda()
 
-    #     'dataset':dataset,
-    #     'train_mask':train_mask,
-    #     'val_mask':val_mask,
-    #     'test_mask':test_mask,
-    #     'idx_test':idx_test,
-    #     'features':features,
-    #     'labels':labels,
-    #     'adj':adj,
-    #     'adj_norm':adj_norm,
-    #     'adj_orig':adj_orig,
-    #     'pos_weight':pos_weight,
-    #     'norm':norm,
-    #     'n_nodes':n_nodes,
-    #     'feat_dim':feat_dim,
-    #     'num_classes':num_classes
-    # }
-
     train(
         model=model,
         features=data['features'],
@@ -86,7 +67,8 @@ def main(gae_args, explainer_args):
         train_mask=data['train_mask'],
         optimizer=optimizer,
         epoch=explainer_args.bb_epochs,
-        val_mask=data['val_mask']
+        val_mask=data['val_mask'],
+        dataset_name=explainer_args.dataset_str
     )
 
     model.eval()
@@ -98,9 +80,9 @@ def main(gae_args, explainer_args):
     print("Training GNN is finished.")
 
     print("Training clustering model:")
-    dmon = DMon(explainer_args, data, model)
+    dmon = DMon(data, model, 16, explainer_args.dmon_epochs, explainer_args.dmon_lr, explainer_args.dataset_str)
     print("Training AE.")
-    graph_ae = gae(gae_args)
+    graph_ae = gae(gae_args, data_AE)
     print("Explanation step:")
 
     idx_test = np.arange(0, data['n_nodes'])[data['test_mask'].cpu()]

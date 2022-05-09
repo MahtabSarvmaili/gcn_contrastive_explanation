@@ -106,12 +106,18 @@ class CFExplainer:
             self.graph_AE, self.sub_feat, output[self.new_idx], self.y_pred_orig, self.sub_adj
         )
         # loss_total, loss_perturb, loss_graph_dist, cf_adj = self.cf_model.loss_PN_CLUSTER(
-        #     self.cluster, self.sub_feat, encode_sub_features, output[self.new_idx], self.y_pred_orig, self.sub_adj, self.node_idx
+        #     self.cluster,
+        #     self.sub_feat,
+        #     encode_sub_features,
+        #     output[self.new_idx],
+        #     self.y_pred_orig,
+        #     self.sub_adj,
+        #     self.node_idx
         # )
         loss_total.backward()
         clip_grad_norm_(self.cf_model.parameters(), 2.0)
         self.cf_optimizer.step()
-        if epoch%50 == 0 and epoch != 0:
+        if epoch%10 == 0 and epoch != 0:
             print('Node idx: {}'.format(self.node_idx),
                   'New idx: {}'.format(self.new_idx),
                   'Epoch: {:04d}'.format(epoch + 1),

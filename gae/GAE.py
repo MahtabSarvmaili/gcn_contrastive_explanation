@@ -13,14 +13,14 @@ from torch_geometric.utils import to_dense_adj, train_test_split_edges
 from gae.model import GCNModelVAE
 from gae.loss import loss_function
 from gae.utils import load_data, mask_test_edges, preprocess_graph, get_roc_score
-from data.data_loader import load_data_ae
+from data.data_loader import load_data_AE
 torch.manual_seed(0)
 np.random.seed(0)
 
 
 
-def gae(args):
-    data = load_data_ae(args)
+def gae(args, data):
+
     print("Using {} dataset".format(args.dataset_str))
     model = GCNModelVAE(data['feat_dim'], args.hidden1, args.hidden2, args.dropout)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)

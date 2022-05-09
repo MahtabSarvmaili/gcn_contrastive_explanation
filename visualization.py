@@ -13,12 +13,13 @@ np.random.seed(0)
 matplotlib.use('Agg')
 
 
-def plot(X, fig, col, size, true_labels, centroid):
+def plot(X, fig, col, size, true_labels, centroid=None):
     ax = fig.add_subplot(1, 1, 1)
     for i, point in enumerate(X):
         ax.scatter(point[0], point[1], s=size, color=col[true_labels[i]])
-    for i, point in enumerate(centroid):
-        ax.scatter(point[0], point[1], marker='s', s=10*size, color=col[i])
+    if centroid is not None:
+        for i, point in enumerate(centroid):
+            ax.scatter(point[0], point[1], marker='s', s=10*size, color=col[i])
 
 
 def plotClusters(hidden_emb, true_labels, centroid, name):
@@ -39,3 +40,14 @@ def simple_plot(x, y=None, labels=None, name=''):
     plt.legend(loc='best')
     plt.savefig(f'{name}.png')
     plt.close()
+
+
+def plot_high_dim(hidden_emb, true_labels, name):
+    colors = distinctipy.get_colors(36)
+    tsne = TSNE(n_components=2)
+    X_tsne = tsne.fit_transform(hidden_emb)
+    X_tsne = X_tsne
+    # Plot figure
+    fig = plt.figure()
+    plot(X_tsne, fig, colors, 4, true_labels)
+    fig.savefig(f"{name}.png")

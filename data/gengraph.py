@@ -241,7 +241,7 @@ def gen_syn4(nb_shapes=60, width_basis=8, feature_generator=None, m=4):
 
     path = os.path.join("log/syn4_base_h20_o20")
     writer = SummaryWriter(path)
-    io_utils.log_graph(writer, G, "graph/full")
+    # io_utils.log_graph(writer, G, "graph/full")
 
     return G, role_id, name
 
