@@ -261,7 +261,7 @@ class GCNSyntheticPerturb(nn.Module):
         cf_adj.requires_grad = True
         norm_cf_adj = preprocess_graph(cf_adj.cpu().detach(), device=self.device).to_dense()
 
-        reconst_P = graph_AE.reconstruct(x, norm_cf_adj)
+        reconst_P = F.sigmoid(graph_AE.reconstruct(x, norm_cf_adj))
         l2_AE = torch.dist(reconst_P, cf_adj)
 
         dist_l2_dist = torch.dist(norm_cf_adj, org_adj)
@@ -270,6 +270,7 @@ class GCNSyntheticPerturb(nn.Module):
         loss_total = loss_perturb + self.beta * loss_graph_dist + \
                      self.gamma*dist_l1 + self.psi*dist_l2_dist + self.gamma*l2_AE
         return loss_total, loss_perturb, loss_graph_dist, self.P
+
 
     def loss_PN_CLUSTER(self, cluster:DMoN, x, encode_x, output, y_pred_orig, org_adj, node_idx):
         features_bf, org_assignment = cluster(encode_x)

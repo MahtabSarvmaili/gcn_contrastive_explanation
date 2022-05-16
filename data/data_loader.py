@@ -4,7 +4,6 @@ import sys
 sys.path.append('../../..')
 import torch
 import numpy as np
-import pickle
 import os.path as osp
 import scipy.sparse as sp
 
@@ -12,9 +11,10 @@ from torch_geometric.utils import to_dense_adj, train_test_split_edges, dense_to
 from torch_geometric.datasets import Planetoid
 import torch_geometric.transforms as T
 from torch_geometric.data import Data
-from gae.utils import preprocess_graph
+from gae.utils import preprocess_graph, mask_test_edges
 from utils import normalize, normalize_adj, sparse_mx_to_torch_sparse_tensor
 from data.gengraph import gen_syn1, preprocess_input_graph
+import networkx as nx
 torch.manual_seed(0)
 np.random.seed(0)
 
@@ -26,38 +26,47 @@ def __load__planetoid__(dataset_str, transformer):
 
 
 def __prepare_edge_class_dataset__(dataset, device):
-    dataset = train_test_split_edges(dataset)
-    train_adj = to_dense_adj(dataset.train_pos_edge_index).squeeze(dim=0)
-    val_adj = to_dense_adj(dataset.val_pos_edge_index, max_num_nodes=dataset.num_nodes).squeeze(dim=0)
-
-    train_adj_norm = preprocess_graph(train_adj.cpu(), device=device)
-    val_adj_norm = preprocess_graph(val_adj.cpu(), device=device)
-    adj_orig = train_adj.cpu().detach().numpy()
+    adj = nx.adjacency_matrix(nx.from_edgelist(dataset.edge_index.t().cpu().numpy()))
+    # Store original adjacency matrix (without diagonal entries) for later
+    adj_orig = adj
     adj_orig = adj_orig - sp.dia_matrix((adj_orig.diagonal()[np.newaxis, :], [0]), shape=adj_orig.shape)
-    pos_weight = torch.Tensor([float(train_adj.shape[0] * train_adj.shape[0] - train_adj.sum()) / train_adj.sum()])
+    adj_orig.eliminate_zeros()
+
+    adj_train, train_edges, val_edges, val_edges_false, test_edges, test_edges_false, edges = mask_test_edges(adj)
+    adj = adj_train
+    # Some preprocessing
+    adj_norm = preprocess_graph(adj, device)
+    adj_label = adj_train + sp.eye(adj_train.shape[0])
+    # adj_label = sparse_to_tuple(adj_label)
+    adj_label = torch.FloatTensor(adj_label.toarray())
+    adj_train = torch.FloatTensor(adj_train.todense())
+    pos_weight = float(adj.shape[0] * adj.shape[0] - adj.sum()) / adj.sum()
+    pos_weight = torch.tensor(pos_weight, dtype=torch.float32)
+    norm = adj.shape[0] * adj.shape[0] / float((adj.shape[0] * adj.shape[0] - adj.sum()) * 2)
     if device=='cuda':
+        adj_train = adj_train.cuda()
+        adj_label = adj_label.cuda()
         pos_weight = pos_weight.cuda()
-    norm = train_adj.shape[0] * train_adj.shape[0] / float((train_adj.shape[0] * train_adj.shape[0] - train_adj.sum()) * 2)
 
     return {
-        'train_adj':train_adj,
-        'train_adj_norm':train_adj_norm,
-        'train_neg_adj_mask':dataset.train_neg_adj_mask,
-        'val_adj':val_adj,
-        'val_adj_norm':val_adj_norm,
-        'val_pos_edge_index':dataset.val_pos_edge_index,
-        'val_neg_edge_index': dataset.val_neg_edge_index,
-        'test_pos_edge_index':dataset.test_pos_edge_index,
-        'test_neg_edge_index':dataset.test_neg_edge_index,
+        'train_adj':adj_train,
+        'adj_norm':adj_norm,
+        'train_edges':train_edges,
+        'val_edges':val_edges,
+        'val_neg_edge':val_edges_false,
+        'test_edge':test_edges,
+        'test_neg_edge':test_edges_false,
         'features':dataset.x,
-        'labels':dataset.y,
+        'labels':adj_label,
         'adj_orig':adj_orig,
+        'edge_index':edges,
         'pos_weight':pos_weight,
         'norm':norm,
         'n_nodes':dataset.num_nodes,
         'feat_dim':dataset.num_features,
         'num_classes':len(dataset.y.unique())
     }
+
 
 def load_data(args):
     transform = T.Compose([
@@ -107,8 +116,8 @@ def load_data(args):
 
 def load_data_AE(args):
     transform = T.Compose([
-        T.NormalizeFeatures(),
-        T.ToDevice(args.device),
+        # T.NormalizeFeatures(),
+        T.ToDevice(args.device)
     ])
     dataset = __load__planetoid__(args.dataset_str, transform)
     dataset.train_mask = dataset.test_mask = dataset.val_mask = None

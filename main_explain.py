@@ -5,7 +5,7 @@ sys.path.append('../..')
 import torch
 import numpy as np
 from data.data_loader import load_data, load_synthetic, load_synthetic_AE
-from data.gengraph import gen_syn2
+from data.gengraph import gen_syn1, gen_syn2, gen_syn3, gen_syn4
 from utils import normalize_adj, get_neighbourhood
 from model import GCN, train
 from cf_explainer import CFExplainer
@@ -16,11 +16,11 @@ np.random.seed(0)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--device', type=str, default='cuda', help='torch device.')
-parser.add_argument('--epochs', type=int, default=50, help='Number of epochs to train.')
+parser.add_argument('--epochs', type=int, default=200, help='Number of epochs to train.')
 parser.add_argument('--hidden1', type=int, default=32, help='Number of units in hidden layer 1.')
 parser.add_argument('--hidden2', type=int, default=16, help='Number of units in hidden layer 2.')
-parser.add_argument('--lr', type=float, default=0.01, help='Initial learning rate.')
-parser.add_argument('--dropout', type=float, default=0.5, help='Dropout rate (1 - keep probability).')
+parser.add_argument('--lr', type=float, default=0.001, help='Initial learning rate.')
+parser.add_argument('--dropout', type=float, default=0.0, help='Dropout rate (1 - keep probability).')
 parser.add_argument('--dataset-str', type=str, default='cora', help='type of dataset.')
 gae_args = parser.parse_args()
 
@@ -80,7 +80,7 @@ def main(gae_args, explainer_args):
     print("Training GNN is finished.")
 
     print("Training clustering model:")
-    dmon = DMon(data, model, 16, explainer_args.dmon_epochs, explainer_args.dmon_lr, explainer_args.dataset_str)
+    # dmon = DMon(data, model, 16, explainer_args.dmon_epochs, explainer_args.dmon_lr, explainer_args.dataset_str)
     print("Training AE.")
     graph_ae = gae(gae_args, data_AE)
     print("Explanation step:")
@@ -104,7 +104,6 @@ def main(gae_args, explainer_args):
         explainer = CFExplainer(
             model=model,
             graph_ae=graph_ae,
-            cluster=dmon,
             sub_adj=sub_adj,
             sub_feat=sub_feat,
             n_hid=explainer_args.hidden,

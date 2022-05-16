@@ -63,6 +63,55 @@ def sparse_to_tuple(sparse_mx):
     return coords, values, shape
 
 
+def preprocess_graph(adj, device):
+    adj = sp.coo_matrix(adj)
+    adj_ = adj + sp.eye(adj.shape[0])
+    rowsum = np.array(adj_.sum(1))
+    degree_mat_inv_sqrt = sp.diags(np.power(rowsum, -0.5).flatten())
+    adj_normalized = adj_.dot(degree_mat_inv_sqrt).transpose().dot(degree_mat_inv_sqrt).tocoo()
+    # return sparse_to_tuple(adj_normalized)
+    return sparse_mx_to_torch_sparse_tensor(adj_normalized, device)
+
+
+def sparse_mx_to_torch_sparse_tensor(sparse_mx, device):
+    """Convert a scipy sparse matrix to a torch sparse tensor."""
+    sparse_mx = sparse_mx.tocoo().astype(np.float32)
+    indices = torch.from_numpy(
+        np.vstack((sparse_mx.row, sparse_mx.col)).astype(np.int64))
+    values = torch.from_numpy(sparse_mx.data)
+    shape = torch.Size(sparse_mx.shape)
+    x = torch.sparse.FloatTensor(indices, values, shape)
+    if device=='cuda':
+        x = x.cuda()
+    return x
+
+
+def get_roc_score(emb, adj_orig, edges_pos, edges_neg):
+    def sigmoid(x):
+        return 1 / (1 + np.exp(-x))
+
+    # Predict on test set of edges
+    adj_rec = np.dot(emb, emb.T)
+    preds = []
+    pos = []
+    for e in edges_pos:
+        preds.append(sigmoid(adj_rec[e[0], e[1]]))
+        pos.append(adj_orig[e[0], e[1]])
+
+    preds_neg = []
+    neg = []
+    for e in edges_neg:
+        preds_neg.append(sigmoid(adj_rec[e[0], e[1]]))
+        neg.append(adj_orig[e[0], e[1]])
+
+    preds_all = np.hstack([preds, preds_neg])
+    labels_all = np.hstack([np.ones(len(preds)), np.zeros(len(preds_neg))])
+    roc_score = roc_auc_score(labels_all, preds_all)
+    ap_score = average_precision_score(labels_all, preds_all)
+
+    return roc_score, ap_score
+
+
 def mask_test_edges(adj):
     # Function to build test set with 10% positive links
     # NOTE: Splits are randomized and results might slightly deviate from reported numbers in the paper.
@@ -142,53 +191,4 @@ def mask_test_edges(adj):
     adj_train = adj_train + adj_train.T
 
     # NOTE: these edge lists only contain single direction of edge!
-    return adj_train, train_edges, val_edges, val_edges_false, test_edges, test_edges_false
-
-
-def preprocess_graph(adj, device):
-    adj = sp.coo_matrix(adj)
-    adj_ = adj + sp.eye(adj.shape[0])
-    rowsum = np.array(adj_.sum(1))
-    degree_mat_inv_sqrt = sp.diags(np.power(rowsum, -0.5).flatten())
-    adj_normalized = adj_.dot(degree_mat_inv_sqrt).transpose().dot(degree_mat_inv_sqrt).tocoo()
-    # return sparse_to_tuple(adj_normalized)
-    return sparse_mx_to_torch_sparse_tensor(adj_normalized, device)
-
-
-def sparse_mx_to_torch_sparse_tensor(sparse_mx, device):
-    """Convert a scipy sparse matrix to a torch sparse tensor."""
-    sparse_mx = sparse_mx.tocoo().astype(np.float32)
-    indices = torch.from_numpy(
-        np.vstack((sparse_mx.row, sparse_mx.col)).astype(np.int64))
-    values = torch.from_numpy(sparse_mx.data)
-    shape = torch.Size(sparse_mx.shape)
-    x = torch.sparse.FloatTensor(indices, values, shape)
-    if device=='cuda':
-        x = x.cuda()
-    return x
-
-
-def get_roc_score(emb, adj_orig, edges_pos, edges_neg):
-    def sigmoid(x):
-        return 1 / (1 + np.exp(-x))
-
-    # Predict on test set of edges
-    adj_rec = np.dot(emb, emb.T)
-    preds = []
-    pos = []
-    for e in edges_pos:
-        preds.append(sigmoid(adj_rec[e[0], e[1]]))
-        pos.append(adj_orig[e[0], e[1]])
-
-    preds_neg = []
-    neg = []
-    for e in edges_neg:
-        preds_neg.append(sigmoid(adj_rec[e[0], e[1]]))
-        neg.append(adj_orig[e[0], e[1]])
-
-    preds_all = np.hstack([preds, preds_neg])
-    labels_all = np.hstack([np.ones(len(preds)), np.zeros(len(preds_neg))])
-    roc_score = roc_auc_score(labels_all, preds_all)
-    ap_score = average_precision_score(labels_all, preds_all)
-
-    return roc_score, ap_score
+    return adj_train, train_edges, val_edges, val_edges_false, test_edges, test_edges_false, edges

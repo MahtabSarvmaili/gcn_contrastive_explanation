@@ -28,35 +28,29 @@ def gae(args, data):
         t = time.time()
         model.train()
         optimizer.zero_grad()
-        recovered, mu, logvar = model(data['features'], data['train_adj_norm'])
-        loss = loss_function(preds=recovered, pos_labels=data['train_adj'],
+        recovered, mu, logvar = model(data['features'], data['adj_norm'])
+        loss = loss_function(preds=recovered, labels=data['labels'],
                              mu=mu, logvar=logvar, n_nodes=data['n_nodes'],
-                             norm=data['norm'], pos_weight=data['pos_weight'], neg_labels=data['train_neg_adj_mask'])
+                             norm=data['norm'], pos_weight=data['pos_weight'])
         loss.backward()
         cur_loss = loss.item()
         loss_trace.append(cur_loss)
         optimizer.step()
-        hidden_emb = mu.data.cpu().detach().numpy()
-        if (epoch+1)%10 == 0:
-            model.eval()
-            recovered, mu, logvar = model(data['features'], data['val_adj_norm'])
-            val_loss = loss_function(preds=recovered, pos_labels=data['val_adj'],
-                                 mu=mu, logvar=logvar, n_nodes=data['n_nodes'],
-                                 norm=data['norm'], pos_weight=data['pos_weight'])
+        hidden_emb = mu.data.cpu().numpy()
+        roc_curr, ap_curr = get_roc_score(hidden_emb, data['adj_orig'], data['val_edges'], data['val_neg_edge'])
 
-            roc_curr, ap_curr = get_roc_score(
-                hidden_emb, data['adj_orig'], data['val_pos_edge_index'].t(), data['val_neg_edge_index'].t()
-            )
-            print("Epoch:", '%04d' % (epoch + 1), "train_loss=", "{:.5f}".format(cur_loss),
-                  "val_loss=", "{:.5f}".format(val_loss),
-                  "val_ap=", "{:.5f}".format(ap_curr),
-                  "time=", "{:.5f}".format(time.time() - t)
-                  )
+        print("Epoch:", '%04d' % (epoch + 1), "train_loss=", "{:.5f}".format(cur_loss),
+              "val_ap=", "{:.5f}".format(ap_curr),
+              "time=", "{:.5f}".format(time.time() - t)
+              )
+        if epoch%10==0 and epoch!=0:
+            roc_score, ap_score = get_roc_score(hidden_emb, data['adj_orig'], data['test_edge'], data['test_neg_edge'])
+            print('Test ROC score: ' + str(roc_score))
+            print('Test AP score: ' + str(ap_score))
 
     print("Optimization Finished!")
-    roc_score, ap_score = get_roc_score(
-        hidden_emb, data['adj_orig'], data['test_pos_edge_index'].t(), data['test_neg_edge_index'].t()
-    )
+
+    roc_score, ap_score = get_roc_score(hidden_emb, data['adj_orig'], data['test_edge'], data['test_neg_edge'])
     print('Test ROC score: ' + str(roc_score))
     print('Test AP score: ' + str(ap_score))
     return model
