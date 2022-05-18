@@ -22,7 +22,8 @@ class CFExplainer:
     CF Explainer class, returns counterfactual subgraph
     """
 
-    def __init__(self, model, graph_ae, sub_adj, sub_feat, n_hid, dropout,
+    def __init__(
+            self, model, graph_ae, sub_adj, sub_feat, n_hid, dropout, lr, n_momentum, cf_optimizer,
                  sub_labels, y_pred_orig, num_classes, beta, device, edge_additions=True, kappa=10):
         super(CFExplainer, self).__init__()
         self.model = model
@@ -54,6 +55,13 @@ class CFExplainer:
             print("orig model requires_grad: ", name, param.requires_grad)
         for name, param in self.cf_model.named_parameters():
             print("cf model required_grad: ", name, param.requires_grad)
+
+        if cf_optimizer == "SGD" and n_momentum == 0.0:
+            self.cf_optimizer = optim.SGD(self.cf_model.parameters(), lr=lr)
+        elif cf_optimizer == "SGD" and n_momentum != 0.0:
+            self.cf_optimizer = optim.SGD(self.cf_model.parameters(), lr=lr, nesterov=True, momentum=n_momentum)
+        elif cf_optimizer == "Adadelta":
+            self.cf_optimizer = optim.Adadelta(self.cf_model.parameters(), lr=lr)
 
     def train_cf_model(self):
         self.cf_model.train()
@@ -118,27 +126,29 @@ class CFExplainer:
         cf_stats = []
 
         if y_pred_new_actual != self.y_pred_orig:
+            output_actual = self.cf_model.forward_prediction(self.x, logits=False)
             cf_stats = [self.node_idx.item(), self.new_idx.item(),
                         cf_adj.cpu().detach().numpy(), self.sub_adj.cpu().detach().numpy(),
                         self.y_pred_orig.item(), y_pred_new.item(),
                         y_pred_new_actual.item(), self.sub_labels[self.new_idx].cpu().detach().numpy(),
+                        output_actual.argmax(dim=1).cpu(),
                         self.sub_adj.shape[0], loss_total.item(), loss_perturb.item(), loss_graph_dist.item()]
         return cf_stats, loss_total
 
-    def explain(self, cf_optimizer, node_idx, new_idx, lr, n_momentum, num_epochs, encode_sub_features, PN_training=True):
+    def explain(
+            self,
+            node_idx,
+            new_idx,
+            num_epochs,
+            encode_sub_features,
+            PN_training=True
+    ):
         self.node_idx = node_idx
         self.new_idx = new_idx
 
         self.x = self.sub_feat
         self.A_x = self.sub_adj
         self.D_x = get_degree_matrix(self.A_x)
-
-        if cf_optimizer == "SGD" and n_momentum == 0.0:
-            self.cf_optimizer = optim.SGD(self.cf_model.parameters(), lr=lr)
-        elif cf_optimizer == "SGD" and n_momentum != 0.0:
-            self.cf_optimizer = optim.SGD(self.cf_model.parameters(), lr=lr, nesterov=True, momentum=n_momentum)
-        elif cf_optimizer == "Adadelta":
-            self.cf_optimizer = optim.Adadelta(self.cf_model.parameters(), lr=lr)
 
         perturb_loss_array = []
         total_loss_ = []
@@ -160,8 +170,5 @@ class CFExplainer:
                     num_cf_examples += 1
                 total_loss_.append(loss_total)
                 loss_ = loss_total
-
-        # print("{} CF examples for node_idx = {}".format(num_cf_examples, self.node_idx))
-        # print(" ")
         return (best_cf_example)
 

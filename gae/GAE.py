@@ -39,11 +39,12 @@ def gae(args, data):
         hidden_emb = mu.data.cpu().numpy()
         roc_curr, ap_curr = get_roc_score(hidden_emb, data['adj_orig'], data['val_edges'], data['val_neg_edge'])
 
-        print("Epoch:", '%04d' % (epoch + 1), "train_loss=", "{:.5f}".format(cur_loss),
-              "val_ap=", "{:.5f}".format(ap_curr),
-              "time=", "{:.5f}".format(time.time() - t)
-              )
+
         if epoch%10==0 and epoch!=0:
+            print("Epoch:", '%04d' % (epoch + 1), "train_loss=", "{:.5f}".format(cur_loss),
+                  "val_ap=", "{:.5f}".format(ap_curr),
+                  "time=", "{:.5f}".format(time.time() - t)
+                  )
             roc_score, ap_score = get_roc_score(hidden_emb, data['adj_orig'], data['test_edge'], data['test_neg_edge'])
             print('Test ROC score: ' + str(roc_score))
             print('Test AP score: ' + str(ap_score))

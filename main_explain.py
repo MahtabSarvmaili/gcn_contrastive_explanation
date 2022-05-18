@@ -10,7 +10,7 @@ from utils import normalize_adj, get_neighbourhood
 from model import GCN, train
 from cf_explainer import CFExplainer
 from gae.GAE import gae
-from clustering.main_dmon import DMon
+from visualization import plot_graph
 torch.manual_seed(0)
 np.random.seed(0)
 
@@ -39,14 +39,15 @@ parser.add_argument('--dropout', type=float, default=0.5, help='Dropout rate (1 
 parser.add_argument('--cf-optimizer', type=str, default='SGD', help='Dropout rate (1 - keep probability).')
 parser.add_argument('--dataset-str', type=str, default='cora', help='type of dataset.')
 parser.add_argument('--beta', type=float, default=0.5, help='beta variable')
-parser.add_argument('--include_ae', type=bool, default=False, help='Including AutoEncoder reconstruction loss')
+parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
+parser.add_argument('--graph-result-dir', type=str, default='./results/graphs', help='Result directory')
 parser.add_argument('--n-momentum', type=float, default=0.0, help='Nesterov momentum')
 explainer_args = parser.parse_args()
 
 
 def main(gae_args, explainer_args):
-    data =load_synthetic(gen_syn2, device=explainer_args.device)
-    data_AE = load_synthetic_AE(gen_syn2, device=explainer_args.device)
+    data =load_synthetic(gen_syn1, device=explainer_args.device)
+    data_AE = load_synthetic_AE(gen_syn1, device=explainer_args.device)
     model = GCN(
         nfeat=data['feat_dim'],
         nhid=explainer_args.hidden,
@@ -55,7 +56,7 @@ def main(gae_args, explainer_args):
         dropout=explainer_args.dropout
     )
     optimizer = torch.optim.Adam(model.parameters(), lr=explainer_args.lr, weight_decay=5e-4)
-
+    './re'
     if explainer_args.device=='cuda':
         model = model.cuda()
 
@@ -88,7 +89,7 @@ def main(gae_args, explainer_args):
     idx_test = np.arange(0, data['n_nodes'])[data['test_mask'].cpu()]
     test_cf_examples = []
     for i in idx_test[:20]:
-        sub_adj, sub_feat, sub_labels, node_dict, sub_edge_idx = get_neighbourhood(
+        sub_adj, sub_feat, sub_labels, node_dict, sub_edge_index = get_neighbourhood(
             int(i), data['edge_index'], explainer_args.n_layers + 1, data['features'], data['labels'])
         new_idx = node_dict[int(i)]
         # Check that original model gives same prediction on full graph and subgraph
@@ -108,6 +109,9 @@ def main(gae_args, explainer_args):
             sub_feat=sub_feat,
             n_hid=explainer_args.hidden,
             dropout=explainer_args.dropout,
+            cf_optimizer=explainer_args.cf_optimizer,
+            lr=explainer_args.lr,
+            n_momentum=explainer_args.n_momentum,
             sub_labels=sub_labels,
             y_pred_orig=y_pred_orig[i],
             num_classes=data['num_classes'],
@@ -117,14 +121,27 @@ def main(gae_args, explainer_args):
         explainer.cf_model.cuda()
         cf_example = explainer.explain(
             node_idx=i,
-            cf_optimizer=explainer_args.cf_optimizer,
             new_idx=new_idx,
-            lr=explainer_args.lr,
-            n_momentum=explainer_args.n_momentum,
             num_epochs=explainer_args.cf_epochs,
             encode_sub_features=sub_feat_
-        )  # Need node dict for accuracy calculation
+        )
         test_cf_examples.append(cf_example)
+        plot_graph(
+            sub_adj.cpu().numpy(),
+            sub_labels,
+            new_idx,
+            f'{explainer_args.graph_result_dir}/{new_idx}_sub_adj.png',
+            sub_edge_index.t().cpu().numpy()
+        )
+        for i, x in enumerate(cf_example):
+            plot_graph(
+                x[2],
+                x[8],
+                new_idx,
+                f'{explainer_args.graph_result_dir}/{new_idx}_counter_factual_{i}.png',
+                sub_edge_index.t().cpu().numpy()
+            )
+
         print('yes!')
 
 

@@ -56,32 +56,81 @@ def plot_high_dim(hidden_emb, true_labels, name):
     fig.savefig(f"{name}.png")
 
 
-def plot_graph(adj, labels):
+def plot_graph(adj, labels, node_idx, name, org_edge_idx=None):
     n_nodes = adj.shape[0]
-    colors = ['orange', 'red', 'green', 'blue', 'maroon', 'brown', 'darkslategray', 'paleturquoise', 'darksalmon',
+    labels2colors = {}
+    colors = ['orange', 'green', 'blue', 'maroon', 'brown', 'darkslategray', 'paleturquoise', 'darksalmon',
               'slategray', 'mediumseagreen', 'mediumblue', 'orchid', ]
     colors = np.random.permutation(colors)
-    a = dense_to_sparse(torch.tensor(adj))[0].t().cpu().numpy()
+    edge_index = dense_to_sparse(torch.tensor(adj))[0].t().cpu().numpy()
     edge_list = []
-    for i in a:
+    for i in edge_index:
         edge_list.append((i[0], i[1]))
 
-    colors = np.random.permutation(colors)
+    # colors = np.random.permutation(colors)
     plt.close()
     G = nx.Graph()
     G.add_nodes_from(range(n_nodes))
     G.add_edges_from(edge_list)
     # explicitly set positions
-    pos = nx.spring_layout(G, seed=63)
-    # Plot nodes with different properties for the "wall" and "roof" nodes
-    for i in labels.unique().cpu():
-        nx.draw_networkx_nodes(
-            G, pos, node_size=20, nodelist=np.arange(n_nodes)[labels.cpu()==i], node_color=colors[i]
-        )
+    for cc in nx.connected_components(G):
+        if node_idx in cc:
+            G = G.subgraph(cc).copy()
+            break
+    a = np.array(edge_list)
+    a = a[a[:, 0] == node_idx]
+    pos_edges = [(u, v) for (u, v) in a]
 
-    nx.draw_networkx_edges(G, pos, alpha=1, width=5)
+    pos = nx.spring_layout(G)
+    max_label = labels.max() + 1
+    nmb_nodes = adj.shape[0]
+    label2nodes = []
+    for i in range(max_label):
+        label2nodes.append([])
+    for i in range(nmb_nodes):
+        label2nodes[labels[i]].append(i)
+
+    for i in range(max_label):
+        node_filter = []
+        for j in range(len(label2nodes[i])):
+            if label2nodes[i][j] in G.nodes():
+                node_filter.append(label2nodes[i][j])
+        nx.draw_networkx_nodes(G, pos,
+                               nodelist=node_filter,
+                               node_color=colors[i % len(colors)],
+                               node_size=20)
+        labels2colors[i]=colors[i % len(colors)]
+
+    nx.draw_networkx_nodes(G, pos,
+                           nodelist=[node_idx],
+                           node_color='yellow',
+                           node_size=100, node_shape='s')
+
+    nx.draw_networkx_edges(G, pos, width=1, alpha=0.5, edge_color='grey')
+
+    nx.draw_networkx_edges(G, pos,
+                           edgelist=pos_edges,
+                           width=1, alpha=0.5)
+
+    if org_edge_idx is not None:
+        edge_list = []
+        for i in edge_index:
+            edge_list.append((i[0], i[1]))
+        actual_nodes = org_edge_idx[org_edge_idx[:, 0] == node_idx][:, 1]
+        max_label = labels.max() + 1
+        nmb_nodes = adj.shape[0]
+        label2nodes = []
+        for i in range(max_label):
+            label2nodes.append([])
+        for i in range(nmb_nodes):
+            label2nodes[labels[i]].append(i)
+        for i in range(max_label):
+            nx.draw_networkx_nodes(G, pos,
+                                   nodelist=actual_nodes,
+                                   node_color='red',
+                                   node_size=10, node_shape='v')
     ax = plt.gca()
     ax.margins(0.11)
     plt.tight_layout()
     plt.axis("off")
-    plt.savefig('testtttt')
+    plt.savefig(name)

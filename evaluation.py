@@ -43,16 +43,3 @@ def fidelity_size_sparsity(model, sub_feat, sub_adj, cf_examples):
         fidelity_.append(c.cpu().numpy())
         l1_dists.append(cf_examples[i])
         sparsity.append(d)
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -45,7 +45,7 @@ class GCNSyntheticPerturb(nn.Module):
 
     def __init__(
             self, nfeat, nhid, nout, nclass, adj, dropout,
-            beta, gamma=0.5, kappa=10, psi=0.0001, edge_additions=False, device='cuda'
+            beta, gamma=0.5, kappa=10, psi=0.01, edge_additions=False, device='cuda'
     ):
         super(GCNSyntheticPerturb, self).__init__()
         self.adj = adj
@@ -99,10 +99,10 @@ class GCNSyntheticPerturb(nn.Module):
         A_tilde.requires_grad = True
 
         if self.edge_additions:  # Learn new adj matrix directly
-            A_tilde = F.sigmoid(self.P_hat_symm) + torch.eye(self.num_nodes).cuda()
+            A_tilde = torch.sigmoid(self.P_hat_symm) + torch.eye(self.num_nodes).cuda()
             # Use sigmoid to bound P_hat in [0,1]
         else:  # Learn P_hat that gets multiplied element-wise with adj -- only edge deletions
-            A_tilde = F.sigmoid(self.P_hat_symm) * self.sub_adj.cuda() + torch.eye(
+            A_tilde = torch.sigmoid(self.P_hat_symm) * self.sub_adj.cuda() + torch.eye(
                 self.num_nodes).cuda()  # Use sigmoid to bound P_hat in [0,1]
 
         D_tilde = get_degree_matrix(A_tilde).detach()  # Don't need gradient of this
@@ -128,7 +128,7 @@ class GCNSyntheticPerturb(nn.Module):
         # Same as forward but uses P instead of P_hat ==> non-differentiable
         # but needed for actual predictions
 
-        self.P = (F.sigmoid(self.P_hat_symm) >= 0.5).float()  # threshold P_hat
+        self.P = (torch.sigmoid(self.P_hat_symm) >= 0.5).float()  # threshold P_hat
 
         if self.edge_additions:
             A_tilde = self.P + torch.eye(self.num_nodes).cuda()
@@ -162,10 +162,10 @@ class GCNSyntheticPerturb(nn.Module):
         A_tilde.requires_grad = True
 
         if self.edge_additions:  # Learn new adj matrix directly
-            A_tilde = F.sigmoid(self.P_hat_symm) + torch.eye(self.num_nodes).cuda()
+            A_tilde = torch.sigmoid(self.P_hat_symm) + torch.eye(self.num_nodes).cuda()
             # Use sigmoid to bound P_hat in [0,1]
         else:  # Learn P_hat that gets multiplied element-wise with adj -- only edge deletions
-            A_tilde = F.sigmoid(self.P_hat_symm) * self.sub_adj.cuda() + torch.eye(
+            A_tilde = torch.sigmoid(self.P_hat_symm) * self.sub_adj.cuda() + torch.eye(
                 self.num_nodes).cuda()  # Use sigmoid to bound P_hat in [0,1]
 
         D_tilde = get_degree_matrix(A_tilde).detach()  # Don't need gradient of this
@@ -188,7 +188,7 @@ class GCNSyntheticPerturb(nn.Module):
         # Same as forward but uses P instead of P_hat ==> non-differentiable
         # but needed for actual predictions
 
-        self.P = (F.sigmoid(self.P_hat_symm) >= 0.5).float()  # threshold P_hat
+        self.P = (torch.sigmoid(self.P_hat_symm) >= 0.5).float()  # threshold P_hat
         if self.edge_additions:
             A_tilde = self.P + torch.eye(self.num_nodes).cuda()
         else:
@@ -261,25 +261,18 @@ class GCNSyntheticPerturb(nn.Module):
         cf_adj.requires_grad = True
         norm_cf_adj = preprocess_graph(cf_adj.cpu().detach(), device=self.device).to_dense()
 
-        reconst_P = F.sigmoid(graph_AE.reconstruct(x, norm_cf_adj))
+        reconst_P = torch.sigmoid(graph_AE.reconstruct(x, norm_cf_adj))
         l2_AE = torch.dist(reconst_P, cf_adj)
 
         dist_l2_dist = torch.dist(norm_cf_adj, org_adj)
         loss_graph_dist = sum(sum(abs(cf_adj - self.adj.cuda()))) / 2
         dist_l1 = cf_adj.abs().sum()
         loss_total = loss_perturb + self.beta * loss_graph_dist + \
-                     self.gamma*dist_l1 + self.psi*dist_l2_dist + self.gamma*l2_AE
+                     self.gamma*dist_l1 + self.gamma*dist_l2_dist + self.psi*l2_AE
         return loss_total, loss_perturb, loss_graph_dist, self.P
 
+    def loss_PN_AE_(self, graph_AE, x, output, y_pred_orig, org_adj):
 
-    def loss_PN_CLUSTER(self, cluster:DMoN, x, encode_x, output, y_pred_orig, org_adj, node_idx):
-        features_bf, org_assignment = cluster(encode_x)
-        org_assignment = org_assignment.argmax(dim=1)
-        cf_adj = self.P
-        norm_cf_adj = preprocess_graph(cf_adj.cpu(), device=self.device).to_dense()
-        cf_adj.requires_grad = True
-        x = self.encode(x, cf_adj)
-        features_af, assignment = cluster(x)
         pert_y_prob = output[y_pred_orig]
         weight = torch.ones(self.nclass).bool()
         weight[y_pred_orig] = False
@@ -287,8 +280,13 @@ class GCNSyntheticPerturb(nn.Module):
 
         diff_y_noty = pert_y_prob - pert_noty_prob
         loss_perturb = torch.max(diff_y_noty, -self.kappa)
+        cf_adj = self.P
+        cf_adj.requires_grad = True
+        norm_cf_adj = preprocess_graph(cf_adj.cpu().detach(), device=self.device).to_dense()
+        reconst_P = torch.sigmoid(graph_AE.reconstruct(x, norm_cf_adj))
+        l2_AE = torch.dist(reconst_P, cf_adj)
         dist_l2_dist = torch.dist(norm_cf_adj, org_adj)
         loss_graph_dist = sum(sum(abs(cf_adj - self.adj.cuda()))) / 2
-        dist_l1 = self.P_hat_symm.abs().sum()
-        loss_total = loss_perturb + self.beta * loss_graph_dist + self.gamma*dist_l1 + self.psi*dist_l2_dist
+        dist_l1 = cf_adj.abs().sum()
+        loss_total = loss_perturb + self.beta * loss_graph_dist + self.gamma*l2_AE
         return loss_total, loss_perturb, loss_graph_dist, self.P
