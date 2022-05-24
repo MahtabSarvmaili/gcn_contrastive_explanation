@@ -1,7 +1,7 @@
 import torch
 from torch_geometric.utils import dense_to_sparse
 from gae.utils import preprocess_graph
-
+import pandas as pd
 torch.manual_seed(0)
 
 
@@ -30,16 +30,21 @@ def prob_necessity(sub_feat, sub_adj, cf_examples, model, device='cuda'):
         print(f'Percentage of agreement Sparsed_CF and Sub_adj{(sub_node_y_pred != labels[j]).sum() / labels[0].__len__()}')
 
 
-def fidelity_size_sparsity(model, sub_feat, sub_adj, cf_examples):
-    fidelity_ = []
-    l1_dists = []
-    sparsity = []
+def fidelity_size_sparsity(model, sub_feat, sub_adj, cf_examples, name=''):
+
     b = model.forward(sub_feat, sub_adj, logit=False)
+    res = []
     for i in range(len(cf_examples)):
         cf_adj = torch.from_numpy(cf_examples[i][2]).cuda()
-        a = model.forward(sub_feat, cf_adj, logit=False)
-        c = (a.argmax(dim=1) == b.argmax(dim=1)).sum() / a.__len__()
-        d = (cf_adj <sub_adj).sum()/ sub_adj.sum()
-        fidelity_.append(c.cpu().numpy())
-        l1_dists.append(cf_examples[i])
-        sparsity.append(d)
+        cf_adj = cf_adj.mul(sub_adj)
+
+        a = model.forward(sub_feat, cf_adj.mul(sub_adj), logit=False)
+        f = (a.argmax(dim=1) == b.argmax(dim=1)).sum() / a.__len__()
+        f = f.cpu().numpy()
+        s = (cf_adj <sub_adj).sum()/ sub_adj.sum()
+        s = s.cpu().numpy()
+        l = cf_adj[i].abs().sum()
+        l = l.cpu().numpy()
+        res.append([f, s, l])
+    df = pd.DataFrame(res, columns=['fidelity', 'sparsity', 'l1_dist'])
+    df.to_csv(f'{name}.csv', index=False)

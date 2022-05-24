@@ -15,6 +15,10 @@ import networkx as nx
 np.random.seed(0)
 matplotlib.use('Agg')
 
+colors = ['orange', 'green', 'blue', 'maroon', 'brown', 'darkslategray', 'paleturquoise', 'darksalmon',
+          'slategray', 'mediumseagreen', 'mediumblue', 'orchid', ]
+colors = np.random.permutation(colors)
+
 
 def plot(X, fig, col, size, true_labels, centroid=None):
     ax = fig.add_subplot(1, 1, 1)
@@ -58,10 +62,6 @@ def plot_high_dim(hidden_emb, true_labels, name):
 
 def plot_graph(adj, labels, node_idx, name, org_edge_idx=None):
     n_nodes = adj.shape[0]
-    labels2colors = {}
-    colors = ['orange', 'green', 'blue', 'maroon', 'brown', 'darkslategray', 'paleturquoise', 'darksalmon',
-              'slategray', 'mediumseagreen', 'mediumblue', 'orchid', ]
-    colors = np.random.permutation(colors)
     edge_index = dense_to_sparse(torch.tensor(adj))[0].t().cpu().numpy()
     edge_list = []
     for i in edge_index:
@@ -72,6 +72,7 @@ def plot_graph(adj, labels, node_idx, name, org_edge_idx=None):
     G = nx.Graph()
     G.add_nodes_from(range(n_nodes))
     G.add_edges_from(edge_list)
+    pos = nx.spring_layout(G)
     # explicitly set positions
     for cc in nx.connected_components(G):
         if node_idx in cc:
@@ -80,8 +81,6 @@ def plot_graph(adj, labels, node_idx, name, org_edge_idx=None):
     a = np.array(edge_list)
     a = a[a[:, 0] == node_idx]
     pos_edges = [(u, v) for (u, v) in a]
-
-    pos = nx.spring_layout(G)
     max_label = labels.max() + 1
     nmb_nodes = adj.shape[0]
     label2nodes = []
@@ -98,13 +97,12 @@ def plot_graph(adj, labels, node_idx, name, org_edge_idx=None):
         nx.draw_networkx_nodes(G, pos,
                                nodelist=node_filter,
                                node_color=colors[i % len(colors)],
-                               node_size=20)
-        labels2colors[i]=colors[i % len(colors)]
+                               node_size=20, label=str(i))
 
     nx.draw_networkx_nodes(G, pos,
                            nodelist=[node_idx],
                            node_color='yellow',
-                           node_size=100, node_shape='s')
+                           node_size=100, node_shape='s', label=str(labels[node_idx]))
 
     nx.draw_networkx_edges(G, pos, width=1, alpha=0.5, edge_color='grey')
 
@@ -113,24 +111,16 @@ def plot_graph(adj, labels, node_idx, name, org_edge_idx=None):
                            width=1, alpha=0.5)
 
     if org_edge_idx is not None:
-        edge_list = []
-        for i in edge_index:
-            edge_list.append((i[0], i[1]))
-        actual_nodes = org_edge_idx[org_edge_idx[:, 0] == node_idx][:, 1]
-        max_label = labels.max() + 1
-        nmb_nodes = adj.shape[0]
-        label2nodes = []
-        for i in range(max_label):
-            label2nodes.append([])
-        for i in range(nmb_nodes):
-            label2nodes[labels[i]].append(i)
-        for i in range(max_label):
-            nx.draw_networkx_nodes(G, pos,
-                                   nodelist=actual_nodes,
-                                   node_color='red',
-                                   node_size=10, node_shape='v')
+        actual_nodes = org_edge_idx[org_edge_idx[:, 0] == node_idx][:,1]
+        nx.draw_networkx_nodes(G, pos,
+                               nodelist=actual_nodes,
+                               node_color='red',
+                               node_size=10, node_shape='v', label='neighbors')
+
     ax = plt.gca()
     ax.margins(0.11)
     plt.tight_layout()
+    plt.legend()
+    plt.title(name)
     plt.axis("off")
     plt.savefig(name)

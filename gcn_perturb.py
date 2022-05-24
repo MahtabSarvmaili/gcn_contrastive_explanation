@@ -45,7 +45,7 @@ class GCNSyntheticPerturb(nn.Module):
 
     def __init__(
             self, nfeat, nhid, nout, nclass, adj, dropout,
-            beta, gamma=0.5, kappa=10, psi=0.01, edge_additions=False, device='cuda'
+            beta, gamma=0.5, kappa=10, psi=0.1, edge_additions=False, device='cuda'
     ):
         super(GCNSyntheticPerturb, self).__init__()
         self.adj = adj
@@ -216,15 +216,12 @@ class GCNSyntheticPerturb(nn.Module):
         output = output.unsqueeze(0)
         y_pred_orig = y_pred_orig.unsqueeze(0)
 
-        if self.edge_additions:
-            cf_adj = self.P
-        else:
-            cf_adj = self.P * self.adj
+        cf_adj = self.P
         cf_adj.requires_grad = True  # Need to change this otherwise loss_graph_dist has no gradient
 
         # Want negative in front to maximize loss instead of minimizing it to find CFs
         loss_pred = - F.nll_loss(output, y_pred_orig)
-        loss_graph_dist = sum(sum(abs(cf_adj - self.adj.cuda()))) / 2  # Number of edges changed (symmetrical)
+        loss_graph_dist = sum(sum(abs(cf_adj - self.adj.cuda())))  # Number of edges changed (symmetrical)
 
         # Zero-out loss_pred with pred_same if prediction flips
         loss_total = pred_same * loss_pred + self.beta * loss_graph_dist
@@ -246,7 +243,7 @@ class GCNSyntheticPerturb(nn.Module):
         loss_graph_dist = sum(sum(abs(cf_adj - self.adj.cuda()))) / 2
         dist_l1 = cf_adj.abs().sum()
         loss_total = loss_perturb + self.beta * loss_graph_dist + self.gamma*dist_l1 + self.psi*dist_l2_dist
-        return loss_total, loss_perturb, loss_graph_dist, self.P
+        return loss_total, loss_perturb, loss_graph_dist, cf_adj
 
     def loss_PN_AE_L1_L2(self, graph_AE, x, output, y_pred_orig, org_adj):
 
@@ -265,13 +262,13 @@ class GCNSyntheticPerturb(nn.Module):
         l2_AE = torch.dist(reconst_P, cf_adj)
 
         dist_l2_dist = torch.dist(norm_cf_adj, org_adj)
-        loss_graph_dist = sum(sum(abs(cf_adj - self.adj.cuda()))) / 2
+        loss_graph_dist = sum(sum(abs(cf_adj - self.adj.cuda())))
         dist_l1 = cf_adj.abs().sum()
         loss_total = loss_perturb + self.beta * loss_graph_dist + \
                      self.gamma*dist_l1 + self.gamma*dist_l2_dist + self.psi*l2_AE
-        return loss_total, loss_perturb, loss_graph_dist, self.P
+        return loss_total, loss_perturb, loss_graph_dist, cf_adj
 
-    def loss_PN_AE_(self, graph_AE, x, output, y_pred_orig, org_adj):
+    def loss_PN_AE_(self, graph_AE, x, output, y_pred_orig):
 
         pert_y_prob = output[y_pred_orig]
         weight = torch.ones(self.nclass).bool()
@@ -285,8 +282,6 @@ class GCNSyntheticPerturb(nn.Module):
         norm_cf_adj = preprocess_graph(cf_adj.cpu().detach(), device=self.device).to_dense()
         reconst_P = torch.sigmoid(graph_AE.reconstruct(x, norm_cf_adj))
         l2_AE = torch.dist(reconst_P, cf_adj)
-        dist_l2_dist = torch.dist(norm_cf_adj, org_adj)
         loss_graph_dist = sum(sum(abs(cf_adj - self.adj.cuda()))) / 2
-        dist_l1 = cf_adj.abs().sum()
         loss_total = loss_perturb + self.beta * loss_graph_dist + self.gamma*l2_AE
-        return loss_total, loss_perturb, loss_graph_dist, self.P
+        return loss_total, loss_perturb, loss_graph_dist, cf_adj

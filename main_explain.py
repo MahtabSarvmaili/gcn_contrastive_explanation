@@ -11,8 +11,10 @@ from model import GCN, train
 from cf_explainer import CFExplainer
 from gae.GAE import gae
 from visualization import plot_graph
+from evaluation import fidelity_size_sparsity
 torch.manual_seed(0)
 np.random.seed(0)
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--device', type=str, default='cuda', help='torch device.')
@@ -41,6 +43,8 @@ parser.add_argument('--dataset-str', type=str, default='cora', help='type of dat
 parser.add_argument('--beta', type=float, default=0.5, help='beta variable')
 parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
 parser.add_argument('--graph-result-dir', type=str, default='./results/graphs', help='Result directory')
+parser.add_argument('--graph-result-name', type=str, default='loss_PN_L1_L2', help='Result name')
+parser.add_argument('--cf_train_loss', type=str, default='loss_PN_L1_L2', help='CF explainer loss function')
 parser.add_argument('--n-momentum', type=float, default=0.0, help='Nesterov momentum')
 explainer_args = parser.parse_args()
 
@@ -123,25 +127,30 @@ def main(gae_args, explainer_args):
             node_idx=i,
             new_idx=new_idx,
             num_epochs=explainer_args.cf_epochs,
-            encode_sub_features=sub_feat_
         )
         test_cf_examples.append(cf_example)
         plot_graph(
             sub_adj.cpu().numpy(),
-            sub_labels,
+            sub_labels.cpu().numpy(),
             new_idx,
-            f'{explainer_args.graph_result_dir}/{new_idx}_sub_adj.png',
+            f'{explainer_args.graph_result_dir}/{new_idx}_sub_adj_{explainer_args.graph_result_name}.png',
             sub_edge_index.t().cpu().numpy()
         )
         for i, x in enumerate(cf_example):
             plot_graph(
-                x[2],
-                x[8],
+                sub_adj.mul(torch.from_numpy(x[2]).cuda()),
+                x[8].cpu().numpy(),
                 new_idx,
-                f'{explainer_args.graph_result_dir}/{new_idx}_counter_factual_{i}.png',
+                f'{explainer_args.graph_result_dir}/{new_idx}_counter_factual_{i}_{explainer_args.graph_result_name}.png',
                 sub_edge_index.t().cpu().numpy()
             )
-
+        fidelity_size_sparsity(
+            model,
+            sub_feat,
+            sub_adj,
+            cf_example,
+            f'{explainer_args.graph_result_dir}/{new_idx}_counter_factual_{explainer_args.graph_result_name}'
+        )
         print('yes!')
 
 
