@@ -124,7 +124,7 @@ class CFExplainer:
             )
         elif self.algorithm == 'loss_PN_AE_':
             loss_total, loss_perturb, loss_graph_dist, cf_adj = self.cf_model.loss_PN_AE_(
-                self.graph_AE, self.sub_feat, output[self.new_idx], self.y_pred_orig, self.sub_adj
+                self.graph_AE, self.sub_feat, output[self.new_idx], self.y_pred_orig
             )
 
         loss_total.backward()

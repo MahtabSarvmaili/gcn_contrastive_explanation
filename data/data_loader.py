@@ -136,7 +136,6 @@ def load_synthetic(gen_syn_func, device='cuda'):
     labels = torch.LongTensor(data['labels'])
     dt = Data(x=features,edge_index=edge_index,y=labels)
     transform = T.Compose([
-        T.NormalizeFeatures(),
         T.ToDevice(device),
         T.RandomNodeSplit(num_val=0.1, num_test=0.2),
     ])
@@ -171,9 +170,8 @@ def load_synthetic_AE(gen_syn_func, device='cuda'):
     features = data['feat']
     features = torch.FloatTensor(np.array(features))
     labels = torch.LongTensor(data['labels'])
-    dt = Data(x=features,edge_index=edge_index,y=labels)
+    dt = Data(x=features, edge_index=edge_index, y=labels)
     transform = T.Compose([
-        T.NormalizeFeatures(),
         T.ToDevice(device),
     ])
     dataset = transform(dt)
