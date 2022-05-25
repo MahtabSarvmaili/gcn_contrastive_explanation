@@ -56,6 +56,7 @@ def train(
     loss_val_ = []
     epochs_ = []
     for i in range(epoch):
+        model.train()
         optimizer.zero_grad()
         preds = model.forward(features, train_adj)
         loss_train = F.nll_loss(preds[train_mask], labels[train_mask])
@@ -76,6 +77,7 @@ def train(
             loss_tr_.append(loss_train.cpu().detach().numpy())
             loss_val_.append(loss_val.cpu().detach().numpy())
             epochs_.append(i)
+
     simple_plot(
         x=epochs_, y=[loss_tr_, loss_val_], labels=["train_loss", "val_loss"], name=f'cgn_train_val_loss_{dataset_name}'
     )

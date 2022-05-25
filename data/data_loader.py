@@ -137,6 +137,7 @@ def load_synthetic(gen_syn_func, device='cuda'):
     dt = Data(x=features,edge_index=edge_index,y=labels)
     transform = T.Compose([
         T.ToDevice(device),
+        T.NormalizeFeatures(),
         T.RandomNodeSplit(num_val=0.1, num_test=0.2),
     ])
     dataset = transform(dt)
