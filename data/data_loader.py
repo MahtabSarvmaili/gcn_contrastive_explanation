@@ -60,6 +60,7 @@ def __prepare_edge_class_dataset__(dataset, device):
         'labels':adj_label,
         'adj_orig':adj_orig,
         'edge_index':edges,
+        'edge_index_':dataset.edge_index,
         'pos_weight':pos_weight,
         'norm':norm,
         'n_nodes':dataset.num_nodes,
@@ -136,8 +137,8 @@ def load_synthetic(gen_syn_func, device='cuda'):
     labels = torch.LongTensor(data['labels'])
     dt = Data(x=features,edge_index=edge_index,y=labels)
     transform = T.Compose([
-        T.ToDevice(device),
         T.NormalizeFeatures(),
+        T.ToDevice(device),
         T.RandomNodeSplit(num_val=0.1, num_test=0.2),
     ])
     dataset = transform(dt)
@@ -174,6 +175,7 @@ def load_synthetic_AE(gen_syn_func, device='cuda'):
     dt = Data(x=features, edge_index=edge_index, y=labels)
     transform = T.Compose([
         T.ToDevice(device),
+        T.NormalizeFeatures()
     ])
     dataset = transform(dt)
     return __prepare_edge_class_dataset__(dataset, device)

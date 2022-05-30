@@ -33,13 +33,14 @@ parser.add_argument('--cf-epochs', type=int, default=200, help='Number of epochs
 parser.add_argument('--inputdim', type=int, default=10, help='Input dimension')
 parser.add_argument('--hidden', type=int, default=20, help='Number of units in hidden layer 1.')
 parser.add_argument('--n-layers', type=int, default=3, help='Number of units in hidden layer 1.')
-parser.add_argument('--lr', type=float, default=0.001, help='Initial learning rate.')
+parser.add_argument('--lr', type=float, default=0.005, help='Initial learning rate.')
 parser.add_argument('--n-clusters', type=int, default=16, help='Maximum number of Clusters.')
 parser.add_argument('--dropout', type=float, default=0.5, help='Dropout rate (1 - keep probability).')
 parser.add_argument('--cf-optimizer', type=str, default='SGD', help='Dropout rate (1 - keep probability).')
 parser.add_argument('--dataset-str', type=str, default='cora', help='type of dataset.')
 parser.add_argument('--beta', type=float, default=0.5, help='beta variable')
 parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
+parser.add_argument('--algorithm', type=str, default='cfgnn', help='Result directory')
 parser.add_argument('--graph-result-dir', type=str, default='./results/graphs', help='Result directory')
 parser.add_argument('--graph-result-name', type=str, default='loss_PN_L1_L2', help='Result name')
 parser.add_argument('--cf_train_loss', type=str, default='loss_PN_L1_L2', help='CF explainer loss function')
@@ -48,8 +49,9 @@ explainer_args = parser.parse_args()
 
 
 def main(gae_args, explainer_args):
-    data =load_synthetic(gen_syn1, device=explainer_args.device)
-    data_AE = load_synthetic_AE(gen_syn1, device=explainer_args.device)
+    data =load_synthetic(gen_syn4, device=explainer_args.device)
+    data_AE = load_synthetic_AE(gen_syn4, device=explainer_args.device)
+    AE_treshold = {'gen_syn1': 0.64, 'gen_syn2': [0.7, 0.65], 'gen_syn3':0.55}
     model = GCN(
         nfeat=data['feat_dim'],
         nhid=explainer_args.hidden,
@@ -116,13 +118,15 @@ def main(gae_args, explainer_args):
             y_pred_orig=y_pred_orig[i],
             num_classes=data['num_classes'],
             beta=explainer_args.beta,
-            device=explainer_args.device
+            device=explainer_args.device,
+            algorithm=explainer_args.algorithm
         )
         explainer.cf_model.cuda()
         cf_example = explainer.explain(
             node_idx=i,
             new_idx=new_idx,
             num_epochs=explainer_args.cf_epochs,
+
         )
         test_cf_examples.append(cf_example)
         plot_graph(

@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from layers import GraphConvolution
 from utils import accuracy
 from visualization import simple_plot
+from sklearn.utils.class_weight import compute_class_weight
 torch.manual_seed(0)
 np.random.seed(0)
 
@@ -51,6 +52,9 @@ def train(
         val_mask,
         dataset_name=''
 ):
+    weights = compute_class_weight(class_weight='balanced', classes=np.unique(labels[train_mask].cpu().numpy()),
+                                      y=labels[train_mask].cpu().numpy())
+    weights = torch.FloatTensor(weights).cuda()
     model.train()
     loss_tr_ = []
     loss_val_ = []
@@ -59,7 +63,7 @@ def train(
         model.train()
         optimizer.zero_grad()
         preds = model.forward(features, train_adj)
-        loss_train = F.nll_loss(preds[train_mask], labels[train_mask])
+        loss_train = F.nll_loss(preds[train_mask], labels[train_mask], weight=weights)
         acc_train = accuracy(preds[train_mask], labels[train_mask])
         loss_train.backward()
         optimizer.step()
