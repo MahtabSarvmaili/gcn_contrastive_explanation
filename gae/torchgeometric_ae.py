@@ -2,14 +2,13 @@ import torch
 import sys
 import torch.nn as nn
 import torch.nn.functional as F
-sys.path.append('../..')
-
 from torch_geometric.nn.models import InnerProductDecoder, VGAE
 from torch_geometric.nn.conv import GCNConv
 from torch_geometric.utils import negative_sampling, remove_self_loops, add_self_loops
-from data.data_loader import load_synthetic_AE
-from data.gengraph import gen_syn4
-from torch_geometric.utils import dense_to_sparse
+
+sys.path.append('/')
+
+
 class GCNEncoder(nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels):
         super(GCNEncoder, self).__init__()
@@ -59,43 +58,4 @@ class DeepVGAE(VGAE):
         roc_auc_score, average_precision_score = self.test(z, test_pos_edge_index, test_neg_edge_index)
         return roc_auc_score, average_precision_score
 
-
-import os
-
-import torch
-import torch.nn as nn
-from torch.optim import Adam
-
-from torch_geometric.datasets import Planetoid
-import torch_geometric.transforms as T
-from torch_geometric.utils import train_test_split_edges
-
-torch.manual_seed(12345)
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-enc_in_channels = 871
-enc_hidden_channels = 1
-enc_out_channels = 16
-
-lr = 0.01
-epoch = 400
-
-model = DeepVGAE(enc_in_channels, enc_hidden_channels, enc_out_channels).to(device)
-optimizer = Adam(model.parameters(), lr=lr)
-data = load_synthetic_AE(gen_syn4, device=device)
-pos_edge = dense_to_sparse(data['train_adj'])
-for epoch in range(epoch):
-    model.train()
-    optimizer.zero_grad()
-
-    loss = model.loss(data['features'], data['edge_index_'], torch.FloatTensor(data['edge_index'].transpose()).cuda())
-    loss.backward()
-    optimizer.step()
-    if epoch % 2 == 0:
-        model.eval()
-        roc_auc, ap = model.single_test(data.x,
-                                        data.train_pos_edge_index,
-                                        data.test_pos_edge_index,
-                                        data.test_neg_edge_index)
-        print("Epoch {} - Loss: {} ROC_AUC: {} Precision: {}".format(epoch, loss.cpu().item(), roc_auc, ap))
 

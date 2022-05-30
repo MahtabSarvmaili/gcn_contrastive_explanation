@@ -18,7 +18,7 @@ np.random.seed(0)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--device', type=str, default='cuda', help='torch device.')
-parser.add_argument('--epochs', type=int, default=200, help='Number of epochs to train.')
+parser.add_argument('--epochs', type=int, default=400, help='Number of epochs to train.')
 parser.add_argument('--hidden1', type=int, default=32, help='Number of units in hidden layer 1.')
 parser.add_argument('--hidden2', type=int, default=16, help='Number of units in hidden layer 2.')
 parser.add_argument('--lr', type=float, default=0.01, help='Initial learning rate.')
@@ -40,7 +40,7 @@ parser.add_argument('--cf-optimizer', type=str, default='SGD', help='Dropout rat
 parser.add_argument('--dataset-str', type=str, default='cora', help='type of dataset.')
 parser.add_argument('--beta', type=float, default=0.5, help='beta variable')
 parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
-parser.add_argument('--algorithm', type=str, default='cfgnn', help='Result directory')
+parser.add_argument('--algorithm', type=str, default='loss_PN_AE_', help='Result directory')
 parser.add_argument('--graph-result-dir', type=str, default='./results/graphs', help='Result directory')
 parser.add_argument('--graph-result-name', type=str, default='loss_PN_L1_L2', help='Result name')
 parser.add_argument('--cf_train_loss', type=str, default='loss_PN_L1_L2', help='CF explainer loss function')
@@ -49,9 +49,9 @@ explainer_args = parser.parse_args()
 
 
 def main(gae_args, explainer_args):
-    data =load_synthetic(gen_syn4, device=explainer_args.device)
+    data =load_synthetic(gen_syn1, device=explainer_args.device)
     data_AE = load_synthetic_AE(gen_syn4, device=explainer_args.device)
-    AE_treshold = {'gen_syn1': 0.64, 'gen_syn2': [0.7, 0.65], 'gen_syn3':0.55}
+    AE_treshold = {'gen_syn1': 0.64, 'gen_syn2': [0.7, 0.65], 'gen_syn3':0.55, 'gen_syn4':0.65}
     model = GCN(
         nfeat=data['feat_dim'],
         nhid=explainer_args.hidden,

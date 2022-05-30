@@ -2,9 +2,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
+from torch_geometric.utils import dense_to_sparse
 from utils import get_degree_matrix, create_symm_matrix_from_vec, create_vec_from_symm_matrix
 from gae.utils import preprocess_graph
 from clustering.dmon import DMoN
+
+
 from layers import GraphConvolution
 torch.manual_seed(0)
 
@@ -271,7 +274,7 @@ class GCNSyntheticPerturb(nn.Module):
                      self.gamma*dist_l1 + self.gamma*dist_l2_dist + self.psi*l2_AE
         return loss_total, loss_perturb, loss_graph_dist, self.P
 
-    def loss_PN_AE_(self, graph_AE, x, output, y_pred_orig, org_adj):
+    def loss_PN_AE_(self, graph_AE, x, output, y_pred_orig):
 
         pert_y_prob = output[y_pred_orig]
         weight = torch.ones(self.nclass).bool()
@@ -282,8 +285,8 @@ class GCNSyntheticPerturb(nn.Module):
         loss_perturb = torch.max(diff_y_noty, -self.kappa)
         cf_adj = self.P
         cf_adj.requires_grad = True
-        norm_cf_adj = preprocess_graph(cf_adj.cpu().detach(), device=self.device).to_dense()
-        reconst_P = (torch.sigmoid(graph_AE.reconstruct(x, norm_cf_adj)) > 0.55).float()
+        cf_adj_sparse = dense_to_sparse(cf_adj)[0]
+        reconst_P = (torch.sigmoid(graph_AE.forward(x, cf_adj_sparse)) > 0.5).float()
         l2_AE = torch.dist(reconst_P, cf_adj)
         dist_l2_dist = torch.dist(cf_adj, self.adj)
         loss_graph_dist = sum(sum(abs(cf_adj - self.adj.cuda()))) / 2

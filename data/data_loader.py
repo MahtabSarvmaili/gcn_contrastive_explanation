@@ -49,23 +49,23 @@ def __prepare_edge_class_dataset__(dataset, device):
         pos_weight = pos_weight.cuda()
 
     return {
-        'train_adj':adj_train,
-        'adj_norm':adj_norm,
-        'train_edges':train_edges,
-        'val_edges':val_edges,
-        'val_neg_edge':val_edges_false,
-        'test_edge':test_edges,
-        'test_neg_edge':test_edges_false,
-        'features':dataset.x,
-        'labels':adj_label,
-        'adj_orig':adj_orig,
-        'edge_index':edges,
-        'edge_index_':dataset.edge_index,
-        'pos_weight':pos_weight,
-        'norm':norm,
-        'n_nodes':dataset.num_nodes,
-        'feat_dim':dataset.num_features,
-        'num_classes':len(dataset.y.unique())
+        'train_adj': adj_train,
+        'adj_norm': adj_norm,
+        'train_edges': train_edges,
+        'val_edges': val_edges,
+        'val_neg_edge': val_edges_false,
+        'test_edge': test_edges,
+        'test_neg_edge': test_edges_false,
+        'features': dataset.x,
+        'labels': adj_label,
+        'adj_orig': adj_orig,
+        'edge_index': edges,
+        'edge_index_': dataset.edge_index,
+        'pos_weight': pos_weight,
+        'norm': norm,
+        'n_nodes': dataset.num_nodes,
+        'feat_dim': dataset.num_features,
+        'num_classes': len(dataset.y.unique())
     }
 
 
@@ -160,7 +160,8 @@ def load_synthetic(gen_syn_func, device='cuda'):
         'edge_index':dataset.edge_index,
         'n_nodes':dataset.num_nodes,
         'feat_dim':dataset.num_features,
-        'num_classes':len(dataset.y.unique())
+        'num_classes':len(dataset.y.unique()),
+        'dataset':dataset
     }
 
 
@@ -175,7 +176,15 @@ def load_synthetic_AE(gen_syn_func, device='cuda'):
     dt = Data(x=features, edge_index=edge_index, y=labels)
     transform = T.Compose([
         T.ToDevice(device),
-        T.NormalizeFeatures()
+        T.NormalizeFeatures(),
     ])
     dataset = transform(dt)
-    return __prepare_edge_class_dataset__(dataset, device)
+    all_edge_index = dataset.edge_index
+    dt = train_test_split_edges(dataset, 0.05, 0.1)
+    return {
+        'dataset':dt,
+        'n_nodes': dt.num_nodes,
+        'feat_dim': dt.num_features,
+        'num_classes': len(dt.y.unique()),
+        'all_edge_index':all_edge_index
+    }

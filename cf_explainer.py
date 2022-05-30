@@ -81,15 +81,15 @@ class CFExplainer:
             )
         elif self.algorithm == 'loss_PN_L1_L2':
             loss_total, loss_perturb, loss_graph_dist, cf_adj = self.cf_model.loss_PN_L1_L2(
-                output[self.new_idx], self.y_pred_orig, self.sub_adj
+                output[self.new_idx], self.y_pred_orig
             )
         elif self.algorithm == 'loss_PN_AE_L1_L2':
             loss_total, loss_perturb, loss_graph_dist, cf_adj = self.cf_model.loss_PN_AE_L1_L2(
-                self.graph_AE, self.sub_feat, output[self.new_idx], self.y_pred_orig, self.sub_adj
+                self.graph_AE, self.sub_feat, output[self.new_idx], self.y_pred_orig
             )
         else:
             loss_total, loss_perturb, loss_graph_dist, cf_adj = self.cf_model.loss_PN_AE_(
-                self.graph_AE, self.sub_feat, output[self.new_idx], self.y_pred_orig, self.sub_adj
+                self.graph_AE, self.sub_feat, output[self.new_idx], self.y_pred_orig
             )
         loss_total.backward()
         clip_grad_norm_(self.cf_model.parameters(), 2.0)
