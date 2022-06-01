@@ -14,6 +14,7 @@ from gae.utils import preprocess_graph
 from gcn_perturb import GCNSyntheticPerturb
 
 torch.manual_seed(0)
+np.random.seed(0)
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
 
@@ -24,7 +25,7 @@ class CFExplainer:
 
     def __init__(
             self, model, graph_ae, sub_adj, sub_feat, n_hid, dropout, lr, n_momentum, cf_optimizer,
-                 sub_labels, y_pred_orig, num_classes, beta, device, algorithm='cfgnn', edge_additions=True, kappa=10):
+                 sub_labels, y_pred_orig, num_classes, beta, device, AE_threshold, algorithm='cfgnn', edge_addition=True, kappa=10):
         super(CFExplainer, self).__init__()
         self.model = model
         self.model.eval()
@@ -40,11 +41,13 @@ class CFExplainer:
         self.num_classes = num_classes
         self.device = device
         self.kappa = kappa
-        self.edge_additions = edge_additions
+        self.edge_addition = edge_addition
         self.algorithm = algorithm
         # Instantiate CF model class, load weights from original model
-        self.cf_model = GCNSyntheticPerturb(self.sub_feat.shape[1], n_hid, n_hid,
-                                            self.num_classes, self.sub_adj, dropout, beta, edge_additions=True)
+        self.cf_model = GCNSyntheticPerturb(
+            self.sub_feat.shape[1], n_hid, n_hid,
+            self.num_classes, self.sub_adj, dropout, beta, AE_threshold=AE_threshold, edge_addition=edge_addition
+        )
 
         self.cf_model.load_state_dict(self.model.state_dict(), strict=False)
 

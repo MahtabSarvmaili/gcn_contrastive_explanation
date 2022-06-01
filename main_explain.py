@@ -37,21 +37,22 @@ parser.add_argument('--lr', type=float, default=0.005, help='Initial learning ra
 parser.add_argument('--n-clusters', type=int, default=16, help='Maximum number of Clusters.')
 parser.add_argument('--dropout', type=float, default=0.5, help='Dropout rate (1 - keep probability).')
 parser.add_argument('--cf-optimizer', type=str, default='SGD', help='Dropout rate (1 - keep probability).')
-parser.add_argument('--dataset-str', type=str, default='cora', help='type of dataset.')
+parser.add_argument('--dataset-str', type=str, default='gen_syn3', help='type of dataset.')
 parser.add_argument('--beta', type=float, default=0.5, help='beta variable')
 parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
+parser.add_argument('--edge-addition', type=bool, default=True, help='CF edge_addition')
 parser.add_argument('--algorithm', type=str, default='loss_PN_AE_', help='Result directory')
 parser.add_argument('--graph-result-dir', type=str, default='./results/graphs', help='Result directory')
-parser.add_argument('--graph-result-name', type=str, default='loss_PN_L1_L2', help='Result name')
-parser.add_argument('--cf_train_loss', type=str, default='loss_PN_L1_L2', help='CF explainer loss function')
+parser.add_argument('--graph-result-name', type=str, default='loss_PN_AE_', help='Result name')
+parser.add_argument('--cf_train_loss', type=str, default='loss_PN_AE_', help='CF explainer loss function')
 parser.add_argument('--n-momentum', type=float, default=0.0, help='Nesterov momentum')
 explainer_args = parser.parse_args()
 
 
 def main(gae_args, explainer_args):
-    data =load_synthetic(gen_syn1, device=explainer_args.device)
-    data_AE = load_synthetic_AE(gen_syn4, device=explainer_args.device)
-    AE_treshold = {'gen_syn1': 0.64, 'gen_syn2': [0.7, 0.65], 'gen_syn3':0.55, 'gen_syn4':0.65}
+    data =load_synthetic(gen_syn3, device=explainer_args.device)
+    data_AE = load_synthetic_AE(gen_syn3, device=explainer_args.device)
+    AE_treshold = {'gen_syn1': 0.5, 'gen_syn2': 0.65, 'gen_syn3':0.6, 'gen_syn4':0.62}
     model = GCN(
         nfeat=data['feat_dim'],
         nhid=explainer_args.hidden,
@@ -119,29 +120,36 @@ def main(gae_args, explainer_args):
             num_classes=data['num_classes'],
             beta=explainer_args.beta,
             device=explainer_args.device,
-            algorithm=explainer_args.algorithm
+            AE_threshold=AE_treshold[explainer_args.dataset_str],
+            algorithm=explainer_args.algorithm,
+            edge_addition=explainer_args.edge_addition
         )
         explainer.cf_model.cuda()
         cf_example = explainer.explain(
             node_idx=i,
             new_idx=new_idx,
-            num_epochs=explainer_args.cf_epochs,
-
+            num_epochs=explainer_args.cf_epochs
         )
         test_cf_examples.append(cf_example)
         plot_graph(
             sub_adj.cpu().numpy(),
             sub_labels.cpu().numpy(),
             new_idx,
-            f'{explainer_args.graph_result_dir}/{new_idx}_sub_adj_{explainer_args.graph_result_name}.png',
+            f'{explainer_args.graph_result_dir}/{explainer_args.dataset_str}_{new_idx}_sub_adj_{explainer_args.graph_result_name}.png',
             sub_edge_index.t().cpu().numpy()
         )
         for i, x in enumerate(cf_example):
+            if ~explainer_args.edge_addition:
+                cf_sub_adj = sub_adj.mul(torch.from_numpy(x[2]).cuda())
+            else:
+                cf_sub_adj = sub_adj
+
+
             plot_graph(
-                sub_adj.mul(torch.from_numpy(x[2]).cuda()),
+                cf_sub_adj,
                 x[8].cpu().numpy(),
                 new_idx,
-                f'{explainer_args.graph_result_dir}/{new_idx}_counter_factual_{i}_{explainer_args.graph_result_name}.png',
+                f'{explainer_args.graph_result_dir}/{explainer_args.dataset_str}_{new_idx}_counter_factual_{i}_{explainer_args.graph_result_name}.png',
                 sub_edge_index.t().cpu().numpy()
             )
         fidelity_size_sparsity(
@@ -149,7 +157,8 @@ def main(gae_args, explainer_args):
             sub_feat,
             sub_adj,
             cf_example,
-            f'{explainer_args.graph_result_dir}/{new_idx}_counter_factual_{explainer_args.graph_result_name}'
+            explainer_args.edge_addition,
+            f'{explainer_args.graph_result_dir}/{explainer_args.dataset_str}_{new_idx}_counter_factual_{explainer_args.graph_result_name}'
         )
         print('yes!')
 

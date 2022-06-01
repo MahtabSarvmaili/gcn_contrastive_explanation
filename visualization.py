@@ -63,6 +63,9 @@ def plot_high_dim(hidden_emb, true_labels, name):
 def plot_graph(adj, labels, node_idx, name, org_edge_idx=None):
     n_nodes = adj.shape[0]
     edge_index = dense_to_sparse(torch.tensor(adj))[0].t().cpu().numpy()
+    if len(edge_index) == 0:
+        print(f'{name} No edge exist -> The adjacency matrix is not valid')
+        return
     edge_list = []
     for i in edge_index:
         edge_list.append((i[0], i[1]))

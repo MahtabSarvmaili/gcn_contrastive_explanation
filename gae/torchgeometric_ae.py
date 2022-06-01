@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch_geometric.nn.models import InnerProductDecoder, VGAE
 from torch_geometric.nn.conv import GCNConv
 from torch_geometric.utils import negative_sampling, remove_self_loops, add_self_loops
-
+torch.manual_seed(0)
 sys.path.append('/')
 
 
