@@ -55,6 +55,10 @@ def train(
     weights = compute_class_weight(class_weight='balanced', classes=np.unique(labels[train_mask].cpu().numpy()),
                                       y=labels[train_mask].cpu().numpy())
     weights = torch.FloatTensor(weights).cuda()
+    patience = 3
+    trigger_times = 0
+    prev_loss = np.inf
+
     model.train()
     loss_tr_ = []
     loss_val_ = []
@@ -74,18 +78,26 @@ def train(
             preds = model(features, train_adj)
             loss_val = F.nll_loss(preds[val_mask], labels[val_mask])
             acc_val = accuracy(preds[val_mask], labels[val_mask])
+            if prev_loss < loss_val:
+                trigger_times +=1
+                print('Trigger Times:', trigger_times)
+
+                if trigger_times >= patience:
+                    print('Early stopping!\nStart to test process.')
+                    return
+            else:
+                print('trigger times: 0')
+                trigger_times = 0
             print('Epoch: {:04d}'.format(i),
                   'loss_train: {:.4f}'.format(loss_train.item()),
                   'acc_train: {:.4f}'.format(acc_train.item()),
                   'loss_val: {:.4f}'.format(loss_val.item()),
                   'acc_val: {:.4f}'.format(acc_val.item()))
+            prev_loss = loss_val
             loss_tr_.append(loss_train.cpu().detach().numpy())
             loss_val_.append(loss_val.cpu().detach().numpy())
             epochs_.append(i)
 
-    simple_plot(
-        x=epochs_, y=[loss_tr_, loss_val_], labels=["train_loss", "val_loss"], name=f'cgn_train_val_loss_{dataset_name}'
-    )
 
 def test(
         model: nn.Module,

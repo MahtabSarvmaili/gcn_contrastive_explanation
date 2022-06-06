@@ -4,7 +4,8 @@ import sys
 sys.path.append('../..')
 import torch
 import numpy as np
-from data.data_loader import load_data, load_synthetic, load_synthetic_AE
+from torch_geometric.utils import  dense_to_sparse
+from data.data_loader import load_data, load_synthetic, load_synthetic_AE, load_data_AE
 from data.gengraph import gen_syn1, gen_syn2, gen_syn3, gen_syn4
 from utils import normalize_adj, get_neighbourhood
 from model import GCN, train
@@ -29,15 +30,17 @@ gae_args = parser.parse_args()
 parser = argparse.ArgumentParser()
 parser.add_argument('--device', type=str, default='cuda', help='torch device.')
 parser.add_argument('--bb-epochs', type=int, default=500, help='Number of epochs to train the ')
-parser.add_argument('--cf-epochs', type=int, default=200, help='Number of epochs to train the ')
+parser.add_argument('--cf-epochs', type=int, default=300, help='Number of epochs to train the ')
 parser.add_argument('--inputdim', type=int, default=10, help='Input dimension')
 parser.add_argument('--hidden', type=int, default=20, help='Number of units in hidden layer 1.')
 parser.add_argument('--n-layers', type=int, default=3, help='Number of units in hidden layer 1.')
 parser.add_argument('--lr', type=float, default=0.005, help='Initial learning rate.')
+parser.add_argument('--cf-lr', type=float, default=0.01, help='CF-explainer learning rate.')
 parser.add_argument('--n-clusters', type=int, default=16, help='Maximum number of Clusters.')
 parser.add_argument('--dropout', type=float, default=0.5, help='Dropout rate (1 - keep probability).')
 parser.add_argument('--cf-optimizer', type=str, default='SGD', help='Dropout rate (1 - keep probability).')
-parser.add_argument('--dataset-str', type=str, default='gen_syn3', help='type of dataset.')
+parser.add_argument('--dataset-str', type=str, default='cora', help='type of dataset.')
+parser.add_argument('--dataset-func', type=str, default='__load__planetoid__', help='type of dataset.')
 parser.add_argument('--beta', type=float, default=0.5, help='beta variable')
 parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
 parser.add_argument('--edge-addition', type=bool, default=True, help='CF edge_addition')
@@ -50,9 +53,12 @@ explainer_args = parser.parse_args()
 
 
 def main(gae_args, explainer_args):
-    data =load_synthetic(gen_syn3, device=explainer_args.device)
-    data_AE = load_synthetic_AE(gen_syn3, device=explainer_args.device)
-    AE_treshold = {'gen_syn1': 0.5, 'gen_syn2': 0.65, 'gen_syn3':0.6, 'gen_syn4':0.62}
+    data = load_data(explainer_args)
+    data_AE = load_data_AE(explainer_args)
+
+    # data =load_synthetic(gen_syn3, device=explainer_args.device)
+    # data_AE = load_synthetic_AE(gen_syn3, device=explainer_args.device)
+    AE_threshold = {'gen_syn1': 0.5, 'gen_syn2': 0.65, 'gen_syn3':0.6, 'gen_syn4':0.62, 'cora':0.66}
     model = GCN(
         nfeat=data['feat_dim'],
         nhid=explainer_args.hidden,
@@ -103,7 +109,6 @@ def main(gae_args, explainer_args):
                     model(sub_feat, normalize_adj(sub_adj, explainer_args.device))[new_idx]
                 )
             )
-        sub_feat_ = model.encode(sub_feat, normalize_adj(sub_adj, explainer_args.device))
         # Need to instantitate new cf model every time because size of P changes based on size of sub_adj
         explainer = CFExplainer(
             model=model,
@@ -113,14 +118,14 @@ def main(gae_args, explainer_args):
             n_hid=explainer_args.hidden,
             dropout=explainer_args.dropout,
             cf_optimizer=explainer_args.cf_optimizer,
-            lr=explainer_args.lr,
+            lr=explainer_args.cf_lr,
             n_momentum=explainer_args.n_momentum,
             sub_labels=sub_labels,
             y_pred_orig=y_pred_orig[i],
             num_classes=data['num_classes'],
             beta=explainer_args.beta,
             device=explainer_args.device,
-            AE_threshold=AE_treshold[explainer_args.dataset_str],
+            AE_threshold=AE_threshold[explainer_args.dataset_str],
             algorithm=explainer_args.algorithm,
             edge_addition=explainer_args.edge_addition
         )
