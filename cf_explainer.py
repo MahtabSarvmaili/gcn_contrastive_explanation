@@ -36,9 +36,10 @@ class CFExplainer:
         self.n_hid = n_hid
         self.dropout = dropout
         self.sub_labels = sub_labels
-        self.y_pred_orig = y_pred_orig
-        self.beta = beta
         self.num_classes = num_classes
+        self.y_pred_orig = y_pred_orig
+        self.y_orig_onehot = F.one_hot(y_pred_orig, num_classes=num_classes)
+        self.beta = beta
         self.device = device
         self.kappa = kappa
         self.edge_addition = edge_addition
@@ -92,7 +93,7 @@ class CFExplainer:
             )
         else:
             loss_total, loss_perturb, loss_graph_dist, cf_adj = self.cf_model.loss_PN_AE_(
-                self.graph_AE, self.sub_feat, output[self.new_idx], self.y_pred_orig
+                self.graph_AE, self.sub_feat, output[self.new_idx], self.y_pred_orig, self.y_orig_onehot
             )
         loss_total.backward()
         clip_grad_norm_(self.cf_model.parameters(), 2.0)

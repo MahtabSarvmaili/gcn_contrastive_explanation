@@ -61,7 +61,7 @@ class GCNSyntheticPerturb(nn.Module):
         self.edge_addition = edge_addition  # are edge additions included in perturbed matrix
         self.kappa = torch.tensor(kappa).cuda()
         self.beta = torch.tensor(beta).cuda()
-        self.const = torch.zeros(1, requires_grad=True, device=device)
+        self.const = torch.tensor(0.0, device=device)
         self.gamma = torch.tensor(gamma, device=device)
         self.psi = torch.tensor(psi, device=device)
         # P_hat needs to be symmetric ==>
@@ -282,7 +282,7 @@ class GCNSyntheticPerturb(nn.Module):
                      self.psi*dist_l1 + self.psi*dist_l2_dist + self.gamma*l2_AE
         return loss_total, loss_perturb, loss_graph_dist, cf_adj
 
-    def loss_PN_AE_(self, graph_AE, x, output, y_pred_orig):
+    def loss_PN_AE_(self, graph_AE, x, output, y_pred_orig, y_orig_onehot):
 
         pert_y_prob = output[y_pred_orig]
         weight = torch.ones(self.nclass).bool()
@@ -291,6 +291,12 @@ class GCNSyntheticPerturb(nn.Module):
 
         diff_y_noty = pert_y_prob - pert_noty_prob
         loss_perturb = torch.max(diff_y_noty, -self.kappa)
+        self.target_lab_score = (output*y_orig_onehot).sum(dim=0)
+        self.max_nontarget_lab_score = (
+                (1 - y_orig_onehot) * output -
+                (y_orig_onehot * 10000)).max(dim=0).values
+        Loss_Attack = torch.max(self.const, -self.max_nontarget_lab_score + self.target_lab_score + self.kappa)
+
         if self.edge_addition:
             cf_adj = self.P
         else:

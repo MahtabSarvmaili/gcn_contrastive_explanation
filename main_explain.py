@@ -43,7 +43,7 @@ parser.add_argument('--dataset-func', type=str, default='__load__planetoid__', h
 parser.add_argument('--beta', type=float, default=0.5, help='beta variable')
 parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
 parser.add_argument('--edge-addition', type=bool, default=False, help='CF edge_addition')
-parser.add_argument('--algorithm', type=str, default='loss_PN_AE_L1_L2', help='Result directory')
+parser.add_argument('--algorithm', type=str, default='loss_PN_AE_', help='Result directory')
 parser.add_argument('--graph-result-dir', type=str, default='./results/graphs', help='Result directory')
 parser.add_argument('--graph-result-name', type=str, default='loss_PN_AE_', help='Result name')
 parser.add_argument('--cf_train_loss', type=str, default='loss_PN_AE_', help='CF explainer loss function')
