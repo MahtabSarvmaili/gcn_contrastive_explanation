@@ -4,6 +4,7 @@ import math
 import time
 import torch
 import torch.nn as nn
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 import torch.nn.functional as F
 import numpy as np
 import torch.optim as optim
@@ -44,6 +45,7 @@ class CFExplainer:
         self.kappa = kappa
         self.edge_addition = edge_addition
         self.algorithm = algorithm
+
         # Instantiate CF model class, load weights from original model
         self.cf_model = GCNSyntheticPerturb(
             self.sub_feat.shape[1], n_hid, n_hid,
@@ -67,6 +69,7 @@ class CFExplainer:
             self.cf_optimizer = optim.SGD(self.cf_model.parameters(), lr=lr, nesterov=True, momentum=n_momentum)
         elif cf_optimizer == "Adadelta":
             self.cf_optimizer = optim.Adadelta(self.cf_model.parameters(), lr=lr)
+        self.scheduler = CosineAnnealingWarmRestarts(self.cf_optimizer, T_0=20, T_mult=1)
 
     def predict_cf_model(self):
         self.cf_model.train()
@@ -77,7 +80,9 @@ class CFExplainer:
         y_pred_new_actual = torch.argmax(output_actual[self.new_idx])
         return output, output_actual, y_pred_new, y_pred_new_actual
 
-    def train_cf_model_pn(self, epoch):
+    def train_cf_model_pn(self, epoch, num_epochs):
+
+        self.cf_optimizer.zero_grad()
         output, output_actual, y_pred_new, y_pred_new_actual = self.predict_cf_model()
         if self.algorithm == 'cfgnn':
             loss_total, loss_perturb, loss_graph_dist, cf_adj = self.cf_model.loss(
@@ -92,19 +97,23 @@ class CFExplainer:
                 self.graph_AE, self.sub_feat, output[self.new_idx], self.y_pred_orig
             )
         else:
-            loss_total, loss_perturb, loss_graph_dist, cf_adj = self.cf_model.loss_PN_AE_(
+            loss_total, loss_perturb, loss_graph_dist, l2_AE, cf_adj = self.cf_model.loss_PN_AE_(
                 self.graph_AE, self.sub_feat, output[self.new_idx], self.y_pred_orig, self.y_orig_onehot
             )
         loss_total.backward()
         clip_grad_norm_(self.cf_model.parameters(), 2.0)
         self.cf_optimizer.step()
+        self.scheduler.step(epoch + epoch / num_epochs)
+
         if epoch%10 == 0 and epoch != 0:
             print('Node idx: {}'.format(self.node_idx),
                   'New idx: {}'.format(self.new_idx),
                   'Epoch: {:04d}'.format(epoch + 1),
                   'loss: {:.4f}'.format(loss_total.item()),
                   'pred loss: {:.4f}'.format(loss_perturb.item()),
-                  'graph loss: {:.4f}'.format(loss_graph_dist.item()))
+                  'graph loss: {:.4f}'.format(loss_graph_dist.item()),
+                  'graph AE loss {:.4f}'.format(l2_AE.item())
+            )
             print(" ")
         cf_stats = []
 
@@ -135,9 +144,11 @@ class CFExplainer:
         best_loss = np.inf
         num_cf_examples = 0
         for epoch in range(num_epochs):
-            new_example, loss_total = self.train_cf_model_pn(epoch)
+            new_example, loss_total = self.train_cf_model_pn(epoch, num_epochs)
             if new_example != [] and loss_total < best_loss:
+
                 best_cf_example.append(new_example)
                 best_loss = loss_total
                 num_cf_examples += 1
+                print(f'Epoch {epoch}, Num_cf_examples: {num_cf_examples}')
         return (best_cf_example)
