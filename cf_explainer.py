@@ -90,29 +90,29 @@ class CFExplainer:
             )
         elif self.algorithm == 'loss_PN_L1_L2':
             loss_total, loss_perturb, loss_graph_dist, cf_adj = self.cf_model.loss_PN_L1_L2(
-                output[self.new_idx], self.y_pred_orig
+                output[self.new_idx], self.y_orig_onehot
             )
         elif self.algorithm == 'loss_PN_AE_L1_L2':
             loss_total, loss_perturb, loss_graph_dist, cf_adj = self.cf_model.loss_PN_AE_L1_L2(
-                self.graph_AE, self.sub_feat, output[self.new_idx], self.y_pred_orig
+                self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot
             )
         else:
             loss_total, loss_perturb, loss_graph_dist, l2_AE, cf_adj = self.cf_model.loss_PN_AE_(
-                self.graph_AE, self.sub_feat, output[self.new_idx], self.y_pred_orig, self.y_orig_onehot
+                self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot
             )
         loss_total.backward()
         clip_grad_norm_(self.cf_model.parameters(), 2.0)
         self.cf_optimizer.step()
         self.scheduler.step(epoch + epoch / num_epochs)
 
-        if epoch%10 == 0 and epoch != 0:
-            print('Node idx: {}'.format(self.node_idx),
-                  'New idx: {}'.format(self.new_idx),
-                  'Epoch: {:04d}'.format(epoch + 1),
-                  'loss: {:.4f}'.format(loss_total.item()),
-                  'pred loss: {:.4f}'.format(loss_perturb.item()),
-                  'graph loss: {:.4f}'.format(loss_graph_dist.item()),
-                  'graph AE loss {:.4f}'.format(l2_AE.item())
+        if epoch % 10 == 0 and epoch != 0:
+            print(
+                'Node idx: {}'.format(self.node_idx),
+                'New idx: {}'.format(self.new_idx),
+                'Epoch: {:04d}'.format(epoch + 1),
+                'loss: {:.4f}'.format(loss_total.item()),
+                'pred loss: {:.4f}'.format(loss_perturb.item()),
+                'graph loss: {:.4f}'.format(loss_graph_dist.item()),
             )
             print(" ")
         cf_stats = []

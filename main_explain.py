@@ -1,5 +1,6 @@
 import argparse
 import sys
+import os
 
 sys.path.append('../..')
 import torch
@@ -43,10 +44,10 @@ parser.add_argument('--dataset-func', type=str, default='__load__planetoid__', h
 parser.add_argument('--beta', type=float, default=0.5, help='beta variable')
 parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
 parser.add_argument('--edge-addition', type=bool, default=True, help='CF edge_addition')
-parser.add_argument('--algorithm', type=str, default='loss_PN_AE_', help='Result directory')
-parser.add_argument('--graph-result-dir', type=str, default='./results/graphs', help='Result directory')
-parser.add_argument('--graph-result-name', type=str, default='loss_PN_AE_', help='Result name')
-parser.add_argument('--cf_train_loss', type=str, default='loss_PN_AE_', help='CF explainer loss function')
+parser.add_argument('--algorithm', type=str, default='loss_PN_L1_L2', help='Result directory')
+parser.add_argument('--graph-result-dir', type=str, default='./results', help='Result directory')
+parser.add_argument('--graph-result-name', type=str, default='loss_PN_L1_L2', help='Result name')
+parser.add_argument('--cf_train_loss', type=str, default='loss_PN_L1_L2', help='CF explainer loss function')
 parser.add_argument('--n-momentum', type=float, default=0.5, help='Nesterov momentum')
 explainer_args = parser.parse_args()
 
@@ -54,7 +55,6 @@ explainer_args = parser.parse_args()
 def main(gae_args, explainer_args):
     data = load_data(explainer_args)
     data_AE = load_data_AE(explainer_args)
-    #
     # data =load_synthetic(gen_syn3, device=explainer_args.device)
     # data_AE = load_synthetic_AE(gen_syn3, device=explainer_args.device)
     AE_threshold = {'gen_syn1': 0.5, 'gen_syn2': 0.65, 'gen_syn3':0.6, 'gen_syn4':0.62, 'cora':0.6}
@@ -86,7 +86,8 @@ def main(gae_args, explainer_args):
     data['cluster_features'] = model.encode(data['features'], data['adj_norm']).detach()
     output = model(data['features'], data['adj_norm'])
     y_pred_orig = torch.argmax(output[data['test_mask']], dim=1)
-    print("test set y_true counts: {}".format(np.unique(data['labels'][data['test_mask']].cpu().detach().numpy(), return_counts=True)))
+    print("test set y_true counts: {}".format(
+        np.unique(data['labels'][data['test_mask']].cpu().detach().numpy(), return_counts=True)))
     print("test set y_pred_orig counts: {}".format(np.unique(y_pred_orig.cpu().detach().numpy(), return_counts=True)))
     print("Training GNN is finished.")
 
@@ -139,10 +140,10 @@ def main(gae_args, explainer_args):
             sub_adj.cpu().numpy(),
             sub_labels.cpu().numpy(),
             new_idx,
-            f'{explainer_args.graph_result_dir}/{explainer_args.dataset_str}_{new_idx}_sub_adj_{explainer_args.graph_result_name}.png',
+            f'{explainer_args.graph_result_dir}/{explainer_args.dataset_str}/_{new_idx}_sub_adj_{explainer_args.graph_result_name}.png',
             sub_edge_index.t().cpu().numpy()
         )
-        for j, x in enumerate(cf_example):
+        for j, x in enumerate(cf_example[-2:]):
             if explainer_args.edge_addition is False:
                 cf_sub_adj = sub_adj.mul(torch.from_numpy(x[2]).cuda())
             else:
@@ -151,7 +152,7 @@ def main(gae_args, explainer_args):
                 cf_sub_adj,
                 x[8].cpu().numpy(),
                 new_idx,
-                f'{explainer_args.graph_result_dir}/{explainer_args.dataset_str}_{new_idx}_counter_factual_{j}_{explainer_args.graph_result_name}.png',
+                f'{explainer_args.graph_result_dir}/{explainer_args.dataset_str}/_{new_idx}_counter_factual_{j}_{explainer_args.graph_result_name}.png',
                 sub_edge_index.t().cpu().numpy()
             )
         fidelity_size_sparsity(
@@ -160,10 +161,13 @@ def main(gae_args, explainer_args):
             sub_adj,
             cf_example,
             explainer_args.edge_addition,
-            f'{explainer_args.graph_result_dir}/{explainer_args.dataset_str}_{new_idx}_counter_factual_{explainer_args.graph_result_name}'
+            f'{explainer_args.graph_result_dir}/{explainer_args.dataset_str}/_{new_idx}_counter_factual_{explainer_args.graph_result_name}'
         )
         print('yes!')
 
 
 if __name__ == '__main__':
+
+    if os.listdir(explainer_args.graph_result_dir).__contains__(explainer_args.dataset_str) is False:
+        os.mkdir(explainer_args.graph_result_dir, explainer_args.dataset_str)
     main(gae_args, explainer_args)
