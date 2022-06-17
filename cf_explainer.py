@@ -69,7 +69,6 @@ class CFExplainer:
             self.cf_optimizer = optim.SGD(self.cf_model.parameters(), lr=lr, nesterov=True, momentum=n_momentum)
         elif cf_optimizer == "Adadelta":
             self.cf_optimizer = optim.Adadelta(self.cf_model.parameters(), lr=lr)
-        self.scheduler = CosineAnnealingWarmRestarts(self.cf_optimizer, T_0=20, T_mult=1)
 
     def predict_cf_model(self):
         self.cf_model.train()
@@ -96,6 +95,10 @@ class CFExplainer:
             loss_total, loss_perturb, loss_graph_dist, cf_adj = self.cf_model.loss_PN_AE_L1_L2(
                 self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot
             )
+        elif self.algorithm == 'loss_PN_AE_pure':
+            loss_total, loss_perturb, loss_graph_dist, cf_adj = self.cf_model.loss_PN_AE_pure(
+                self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot
+            )
         else:
             loss_total, loss_perturb, loss_graph_dist, l2_AE, cf_adj = self.cf_model.loss_PN_AE_(
                 self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot
@@ -103,7 +106,6 @@ class CFExplainer:
         loss_total.backward()
         clip_grad_norm_(self.cf_model.parameters(), 2.0)
         self.cf_optimizer.step()
-        self.scheduler.step(epoch + epoch / num_epochs)
 
         if epoch % 10 == 0 and epoch != 0:
             print(
@@ -125,7 +127,7 @@ class CFExplainer:
                         y_pred_new_actual.item(), self.sub_labels[self.new_idx].cpu().detach().numpy(),
                         output_actual.argmax(dim=1).cpu(),
                         self.sub_adj.shape[0], loss_total.item(), loss_perturb.item(), loss_graph_dist.item()]
-        return cf_stats, loss_total
+        return cf_stats, loss_perturb
 
     def explain(
             self,
@@ -145,8 +147,7 @@ class CFExplainer:
         num_cf_examples = 0
         for epoch in range(num_epochs):
             new_example, loss_total = self.train_cf_model_pn(epoch, num_epochs)
-            if new_example != [] and loss_total < best_loss:
-
+            if new_example != [] and loss_total <= best_loss:
                 best_cf_example.append(new_example)
                 best_loss = loss_total
                 num_cf_examples += 1

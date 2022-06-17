@@ -31,12 +31,12 @@ gae_args = parser.parse_args()
 parser = argparse.ArgumentParser()
 parser.add_argument('--device', type=str, default='cuda', help='torch device.')
 parser.add_argument('--bb-epochs', type=int, default=500, help='Number of epochs to train the ')
-parser.add_argument('--cf-epochs', type=int, default=500, help='Number of epochs to train the ')
+parser.add_argument('--cf-epochs', type=int, default=300, help='Number of epochs to train the ')
 parser.add_argument('--inputdim', type=int, default=10, help='Input dimension')
 parser.add_argument('--hidden', type=int, default=20, help='Number of units in hidden layer 1.')
 parser.add_argument('--n-layers', type=int, default=3, help='Number of units in hidden layer 1.')
 parser.add_argument('--lr', type=float, default=0.005, help='Initial learning rate.')
-parser.add_argument('--cf-lr', type=float, default=0.1, help='CF-explainer learning rate.')
+parser.add_argument('--cf-lr', type=float, default=0.01, help='CF-explainer learning rate.')
 parser.add_argument('--dropout', type=float, default=0.2, help='Dropout rate (1 - keep probability).')
 parser.add_argument('--cf-optimizer', type=str, default='SGD', help='Dropout rate (1 - keep probability).')
 parser.add_argument('--dataset-str', type=str, default='cora', help='type of dataset.')
@@ -44,10 +44,10 @@ parser.add_argument('--dataset-func', type=str, default='__load__planetoid__', h
 parser.add_argument('--beta', type=float, default=0.5, help='beta variable')
 parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
 parser.add_argument('--edge-addition', type=bool, default=True, help='CF edge_addition')
-parser.add_argument('--algorithm', type=str, default='loss_PN_L1_L2', help='Result directory')
+parser.add_argument('--algorithm', type=str, default='loss_PN_AE_L1_L2', help='Result directory')
 parser.add_argument('--graph-result-dir', type=str, default='./results', help='Result directory')
-parser.add_argument('--graph-result-name', type=str, default='loss_PN_L1_L2', help='Result name')
-parser.add_argument('--cf_train_loss', type=str, default='loss_PN_L1_L2', help='CF explainer loss function')
+parser.add_argument('--graph-result-name', type=str, default='loss_PN_AE_L1_L2', help='Result name')
+parser.add_argument('--cf_train_loss', type=str, default='loss_PN_AE_L1_L2', help='CF explainer loss function')
 parser.add_argument('--n-momentum', type=float, default=0.5, help='Nesterov momentum')
 explainer_args = parser.parse_args()
 
@@ -57,7 +57,7 @@ def main(gae_args, explainer_args):
     data_AE = load_data_AE(explainer_args)
     # data =load_synthetic(gen_syn3, device=explainer_args.device)
     # data_AE = load_synthetic_AE(gen_syn3, device=explainer_args.device)
-    AE_threshold = {'gen_syn1': 0.5, 'gen_syn2': 0.65, 'gen_syn3':0.6, 'gen_syn4':0.62, 'cora':0.6}
+    AE_threshold = {'gen_syn1': 0.5, 'gen_syn2': 0.65, 'gen_syn3':0.6, 'gen_syn4':0.62, 'cora':0.65}
     model = GCN(
         nfeat=data['feat_dim'],
         nhid=explainer_args.hidden,
@@ -143,7 +143,7 @@ def main(gae_args, explainer_args):
             f'{explainer_args.graph_result_dir}/{explainer_args.dataset_str}/_{new_idx}_sub_adj_{explainer_args.graph_result_name}.png',
             sub_edge_index.t().cpu().numpy()
         )
-        for j, x in enumerate(cf_example[-2:]):
+        for j, x in enumerate(cf_example):
             if explainer_args.edge_addition is False:
                 cf_sub_adj = sub_adj.mul(torch.from_numpy(x[2]).cuda())
             else:

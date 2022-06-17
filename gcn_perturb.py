@@ -57,7 +57,7 @@ class GCNSyntheticPerturb(nn.Module):
 
     def __init__(
             self, nfeat, nhid, nout, nclass, adj, dropout,
-            beta, gamma=0.5, kappa=10, psi=0.5, AE_threshold=0.5, edge_addition=False, device='cuda'
+            beta, gamma=0.1, kappa=10, psi=0.1, AE_threshold=0.5, edge_addition=False, device='cuda'
     ):
         super(GCNSyntheticPerturb, self).__init__()
         self.adj = adj
@@ -252,8 +252,8 @@ class GCNSyntheticPerturb(nn.Module):
             cf_adj = self.P * self.adj
         cf_adj.requires_grad = True  # Need to change this otherwise loss_graph_dist has no gradient
         loss_graph_dist = torch.dist(cf_adj , self.adj.cuda(), p=1) / 2
-        L1 = torch.linalg.norm(cf_adj, ord=1)
-        L2 = torch.linalg.norm(cf_adj, ord=2)
+        L1 = torch.linalg.norm(self.P_hat_symm, ord=1)
+        L2 = torch.linalg.norm(self.P_hat_symm, ord=2)
         loss_total = loss_perturb + self.beta * loss_graph_dist + self.psi*L1 + L2
         return loss_total, loss_perturb, loss_graph_dist, cf_adj
 
@@ -269,8 +269,8 @@ class GCNSyntheticPerturb(nn.Module):
         reconst_P = (torch.sigmoid(graph_AE.forward(x, cf_adj_sparse)) >= self.AE_threshold).float()
         l2_AE = torch.dist(cf_adj, reconst_P, p=2)
         loss_graph_dist = torch.dist(cf_adj , self.adj.cuda(), p=1) / 2
-        L1 = torch.linalg.norm(cf_adj, ord=1)
-        L2 = torch.linalg.norm(cf_adj, ord=2)
+        L1 = torch.linalg.norm(self.P_hat_symm, ord=1)
+        L2 = torch.linalg.norm(self.P_hat_symm, ord=2)
         loss_total = loss_perturb + self.beta * loss_graph_dist + self.psi*L1 + L2 + self.gamma*l2_AE
         return loss_total, loss_perturb, loss_graph_dist, cf_adj
 
@@ -291,7 +291,6 @@ class GCNSyntheticPerturb(nn.Module):
 
     def loss_PN_AE_pure(self, graph_AE, x, output, y_orig_onehot):
         loss_perturb = pertinent_negative_loss(output, y_orig_onehot, self.const, self.kappa)
-
         if self.edge_addition:
             cf_adj = self.P
         else:
