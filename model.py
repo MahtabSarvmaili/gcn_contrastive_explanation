@@ -60,8 +60,8 @@ def train(
     prev_loss = np.inf
 
     model.train()
-    loss_tr_ = []
-    loss_val_ = []
+    # loss_tr_ = []
+    # loss_val_ = []
     epochs_ = []
     for i in range(epoch):
         model.train()
@@ -94,8 +94,8 @@ def train(
                   'loss_val: {:.4f}'.format(loss_val.item()),
                   'acc_val: {:.4f}'.format(acc_val.item()))
             prev_loss = loss_val
-            loss_tr_.append(loss_train.cpu().detach().numpy())
-            loss_val_.append(loss_val.cpu().detach().numpy())
+            # loss_tr_.append(loss_train.cpu().detach().numpy())
+            # loss_val_.append(loss_val.cpu().detach().numpy())
             epochs_.append(i)
 
 

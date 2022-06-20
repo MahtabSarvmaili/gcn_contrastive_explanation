@@ -83,7 +83,10 @@ def plot_graph(adj, labels, node_idx, name, org_edge_idx=None):
             break
     a = np.array(edge_list)
     a = a[a[:, 0] == node_idx]
+    # only plotting the edges and neighboring nodes of the node_idx
     pos_edges = [(u, v) for (u, v) in a]
+    # plotting the whole adjacency matrix
+    # pos_edges = edge_list
     max_label = labels.max() + 1
     nmb_nodes = adj.shape[0]
     label2nodes = []
@@ -107,18 +110,18 @@ def plot_graph(adj, labels, node_idx, name, org_edge_idx=None):
                            node_color='yellow',
                            node_size=100, node_shape='s', label=str(labels[node_idx]))
 
-    nx.draw_networkx_edges(G, pos, width=1, alpha=0.5, edge_color='grey')
+    nx.draw_networkx_edges(G, pos, width=1, alpha=0.5, edge_color='grey', style=':')
 
     nx.draw_networkx_edges(G, pos,
                            edgelist=pos_edges,
                            width=1, alpha=0.5)
 
-    if org_edge_idx is not None:
-        actual_nodes = org_edge_idx[org_edge_idx[:, 0] == node_idx][:,1]
-        nx.draw_networkx_nodes(G, pos,
-                               nodelist=actual_nodes,
-                               node_color='red',
-                               node_size=10, node_shape='v', label='neighbors')
+    # if org_edge_idx is not None:
+    #     actual_nodes = org_edge_idx[org_edge_idx[:, 0] == node_idx][:,1]
+    #     nx.draw_networkx_nodes(G, pos,
+    #                            nodelist=actual_nodes,
+    #                            node_color='red',
+    #                            node_size=10, node_shape='v', label='neighbors')
 
     ax = plt.gca()
     ax.margins(0.11)

@@ -268,11 +268,11 @@ class GCNSyntheticPerturb(nn.Module):
         cf_adj_sparse = dense_to_sparse(cf_adj)[0]
         reconst_P = (torch.sigmoid(graph_AE.forward(x, cf_adj_sparse)) >= self.AE_threshold).float()
         l2_AE = torch.dist(cf_adj, reconst_P, p=2)
-        loss_graph_dist = torch.dist(cf_adj , self.adj.cuda(), p=1) / 2
+        loss_graph_dist = torch.dist(cf_adj, self.adj.cuda(), p=1) / 2
         L1 = torch.linalg.norm(self.P_hat_symm, ord=1)
         L2 = torch.linalg.norm(self.P_hat_symm, ord=2)
         loss_total = loss_perturb + self.beta * loss_graph_dist + self.psi*L1 + L2 + self.gamma*l2_AE
-        return loss_total, loss_perturb, loss_graph_dist, cf_adj
+        return loss_total, loss_perturb, loss_graph_dist, l2_AE, cf_adj
 
     def loss_PN_AE_(self, graph_AE, x, output, y_orig_onehot):
 
@@ -285,7 +285,7 @@ class GCNSyntheticPerturb(nn.Module):
         cf_adj_sparse = dense_to_sparse(cf_adj)[0]
         reconst_P = (torch.sigmoid(graph_AE.forward(x, cf_adj_sparse)) >= self.AE_threshold).float()
         l2_AE = torch.dist(cf_adj, reconst_P, p=2)
-        loss_graph_dist = torch.dist(cf_adj , self.adj.cuda(), p=1) / 2
+        loss_graph_dist = torch.dist(cf_adj, self.adj.cuda(), p=1) / 2
         loss_total = loss_perturb + self.beta * loss_graph_dist
         return loss_total, loss_perturb, loss_graph_dist, l2_AE, cf_adj
 
@@ -301,4 +301,4 @@ class GCNSyntheticPerturb(nn.Module):
         l2_AE = torch.dist(reconst_P, cf_adj)/2
         loss_graph_dist = torch.dist(cf_adj, self.adj.cuda(), p=1) / 2
         loss_total = loss_perturb + self.gamma*l2_AE #+ self.beta * loss_graph_dist+ self.gamma*l2_AE
-        return loss_total, loss_perturb, loss_graph_dist, cf_adj
+        return loss_total, loss_perturb, loss_graph_dist, l2_AE, cf_adj

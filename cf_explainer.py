@@ -80,7 +80,7 @@ class CFExplainer:
         return output, output_actual, y_pred_new, y_pred_new_actual
 
     def train_cf_model_pn(self, epoch, num_epochs):
-
+        l2_AE = None
         self.cf_optimizer.zero_grad()
         output, output_actual, y_pred_new, y_pred_new_actual = self.predict_cf_model()
         if self.algorithm == 'cfgnn':
@@ -92,11 +92,11 @@ class CFExplainer:
                 output[self.new_idx], self.y_orig_onehot
             )
         elif self.algorithm == 'loss_PN_AE_L1_L2':
-            loss_total, loss_perturb, loss_graph_dist, cf_adj = self.cf_model.loss_PN_AE_L1_L2(
+            loss_total, loss_perturb, loss_graph_dist, l2_AE, cf_adj = self.cf_model.loss_PN_AE_L1_L2(
                 self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot
             )
         elif self.algorithm == 'loss_PN_AE_pure':
-            loss_total, loss_perturb, loss_graph_dist, cf_adj = self.cf_model.loss_PN_AE_pure(
+            loss_total, loss_perturb, loss_graph_dist, l2_AE, cf_adj = self.cf_model.loss_PN_AE_pure(
                 self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot
             )
         else:
@@ -127,7 +127,9 @@ class CFExplainer:
                         y_pred_new_actual.item(), self.sub_labels[self.new_idx].cpu().detach().numpy(),
                         output_actual.argmax(dim=1).cpu(),
                         self.sub_adj.shape[0], loss_total.item(), loss_perturb.item(), loss_graph_dist.item()]
-        return cf_stats, loss_perturb
+            if l2_AE is not None:
+                cf_stats.append(float(l2_AE.cpu().detach().numpy()))
+        return cf_stats, loss_total
 
     def explain(
             self,
@@ -147,7 +149,7 @@ class CFExplainer:
         num_cf_examples = 0
         for epoch in range(num_epochs):
             new_example, loss_total = self.train_cf_model_pn(epoch, num_epochs)
-            if new_example != [] and loss_total <= best_loss:
+            if new_example != [] and loss_total < best_loss:
                 best_cf_example.append(new_example)
                 best_loss = loss_total
                 num_cf_examples += 1

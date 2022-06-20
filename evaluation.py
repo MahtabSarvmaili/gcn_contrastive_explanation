@@ -36,7 +36,7 @@ def fidelity_size_sparsity(model, sub_feat, sub_adj, cf_examples, edge_addition,
     res = []
     for i in range(len(cf_examples)):
         cf_adj = torch.from_numpy(cf_examples[i][2]).cuda()
-        if ~edge_addition:
+        if edge_addition is not True:
             cf_adj = cf_adj.mul(sub_adj)
 
         a = model.forward(sub_feat, cf_adj, logit=False)
@@ -44,8 +44,15 @@ def fidelity_size_sparsity(model, sub_feat, sub_adj, cf_examples, edge_addition,
         f = f.cpu().numpy()
         s = (cf_adj <sub_adj).sum()/ sub_adj.sum()
         s = s.cpu().numpy()
-        l = cf_adj[i].abs().sum()
+        l = torch.linalg.norm(cf_adj, ord=1)
         l = l.cpu().numpy()
-        res.append([f, s, l])
-    df = pd.DataFrame(res, columns=['fidelity', 'sparsity', 'l1_dist'])
+        if len(cf_examples[i]) == 14:
+            ae = cf_examples[i][-1]
+            res.append([f, s, l, ae])
+        else:
+            res.append([f, s, l])
+    if len(cf_examples[0])==14:
+        df = pd.DataFrame(res, columns=['fidelity', 'sparsity', 'l1_dist', 'ae_dist'])
+    else:
+        df = pd.DataFrame(res, columns=['fidelity', 'sparsity', 'l1_dist'])
     df.to_csv(f'{name}.csv', index=False)

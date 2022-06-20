@@ -44,10 +44,10 @@ parser.add_argument('--dataset-func', type=str, default='__load__planetoid__', h
 parser.add_argument('--beta', type=float, default=0.5, help='beta variable')
 parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
 parser.add_argument('--edge-addition', type=bool, default=True, help='CF edge_addition')
-parser.add_argument('--algorithm', type=str, default='loss_PN_AE_L1_L2', help='Result directory')
+parser.add_argument('--algorithm', type=str, default='cfgnn', help='Result directory')
 parser.add_argument('--graph-result-dir', type=str, default='./results', help='Result directory')
-parser.add_argument('--graph-result-name', type=str, default='loss_PN_AE_L1_L2', help='Result name')
-parser.add_argument('--cf_train_loss', type=str, default='loss_PN_AE_L1_L2', help='CF explainer loss function')
+parser.add_argument('--graph-result-name', type=str, default='cfgnn', help='Result name')
+parser.add_argument('--cf_train_loss', type=str, default='cfgnn', help='CF explainer loss function')
 parser.add_argument('--n-momentum', type=float, default=0.5, help='Nesterov momentum')
 explainer_args = parser.parse_args()
 
@@ -57,7 +57,7 @@ def main(gae_args, explainer_args):
     data_AE = load_data_AE(explainer_args)
     # data =load_synthetic(gen_syn3, device=explainer_args.device)
     # data_AE = load_synthetic_AE(gen_syn3, device=explainer_args.device)
-    AE_threshold = {'gen_syn1': 0.5, 'gen_syn2': 0.65, 'gen_syn3':0.6, 'gen_syn4':0.62, 'cora':0.65}
+    AE_threshold = {'gen_syn1': 0.5, 'gen_syn2': 0.65, 'gen_syn3':0.6, 'gen_syn4':0.62, 'cora':0.65, 'citeseer':0.6}
     model = GCN(
         nfeat=data['feat_dim'],
         nhid=explainer_args.hidden,
@@ -97,7 +97,7 @@ def main(gae_args, explainer_args):
 
     idx_test = np.arange(0, data['n_nodes'])[data['test_mask'].cpu()]
     test_cf_examples = []
-    for i in idx_test[:20]:
+    for i in idx_test[:10]:
         sub_adj, sub_feat, sub_labels, node_dict, sub_edge_index = get_neighbourhood(
             int(i), data['edge_index'], explainer_args.n_layers + 1, data['features'], data['labels'])
         new_idx = node_dict[int(i)]
@@ -140,7 +140,7 @@ def main(gae_args, explainer_args):
             sub_adj.cpu().numpy(),
             sub_labels.cpu().numpy(),
             new_idx,
-            f'{explainer_args.graph_result_dir}/{explainer_args.dataset_str}/_{new_idx}_sub_adj_{explainer_args.graph_result_name}.png',
+            f'{explainer_args.graph_result_dir}/{explainer_args.dataset_str}/_{i}_sub_adj_{explainer_args.graph_result_name}.png',
             sub_edge_index.t().cpu().numpy()
         )
         for j, x in enumerate(cf_example):
@@ -152,7 +152,7 @@ def main(gae_args, explainer_args):
                 cf_sub_adj,
                 x[8].cpu().numpy(),
                 new_idx,
-                f'{explainer_args.graph_result_dir}/{explainer_args.dataset_str}/_{new_idx}_counter_factual_{j}_{explainer_args.graph_result_name}.png',
+                f'{explainer_args.graph_result_dir}/{explainer_args.dataset_str}/_{i}_counter_factual_{j}_{explainer_args.graph_result_name}.png',
                 sub_edge_index.t().cpu().numpy()
             )
         fidelity_size_sparsity(
@@ -161,7 +161,7 @@ def main(gae_args, explainer_args):
             sub_adj,
             cf_example,
             explainer_args.edge_addition,
-            f'{explainer_args.graph_result_dir}/{explainer_args.dataset_str}/_{new_idx}_counter_factual_{explainer_args.graph_result_name}'
+            f'{explainer_args.graph_result_dir}/{explainer_args.dataset_str}/_{i}_counter_factual_{explainer_args.graph_result_name}'
         )
         print('yes!')
 
@@ -169,5 +169,5 @@ def main(gae_args, explainer_args):
 if __name__ == '__main__':
 
     if os.listdir(explainer_args.graph_result_dir).__contains__(explainer_args.dataset_str) is False:
-        os.mkdir(explainer_args.graph_result_dir, explainer_args.dataset_str)
+        os.mkdir(f'{explainer_args.graph_result_dir}/{explainer_args.dataset_str}')
     main(gae_args, explainer_args)
