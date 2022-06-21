@@ -69,6 +69,8 @@ class CFExplainer:
             self.cf_optimizer = optim.SGD(self.cf_model.parameters(), lr=lr, nesterov=True, momentum=n_momentum)
         elif cf_optimizer == "Adadelta":
             self.cf_optimizer = optim.Adadelta(self.cf_model.parameters(), lr=lr)
+        elif cf_optimizer == "Adam":
+            self.cf_optimizer = optim.Adam(self.cf_model.parameters(), lr=lr)
 
     def predict_cf_model(self):
         self.cf_model.train()

@@ -66,11 +66,12 @@ def plot_graph(adj, labels, node_idx, name, org_edge_idx=None):
     if len(edge_index) == 0:
         print(f'{name} No edge exist -> The adjacency matrix is not valid')
         return
-    edge_list = []
-    for i in edge_index:
-        edge_list.append((i[0], i[1]))
+    edge_list = [(i[0], i[1]) for i in edge_index]
 
-    # colors = np.random.permutation(colors)
+    res = (org_edge_idx[:, None] == edge_index).all(-1).any(-1)
+    removed_edges = org_edge_idx[res == False]
+    removed_edges_list = [(i[0], i[1]) for i in removed_edges]
+
     plt.close()
     G = nx.Graph()
     G.add_nodes_from(range(n_nodes))
@@ -116,12 +117,15 @@ def plot_graph(adj, labels, node_idx, name, org_edge_idx=None):
                            edgelist=pos_edges,
                            width=1, alpha=0.5)
 
-    # if org_edge_idx is not None:
-    #     actual_nodes = org_edge_idx[org_edge_idx[:, 0] == node_idx][:,1]
-    #     nx.draw_networkx_nodes(G, pos,
-    #                            nodelist=actual_nodes,
-    #                            node_color='red',
-    #                            node_size=10, node_shape='v', label='neighbors')
+    ### plotting removed nodes and edges in red
+    a = set(removed_edges.reshape(-1))
+    nx.draw_networkx_nodes(G, pos,
+                           nodelist=a,
+                           node_color='red',
+                           node_size=20)
+    nx.draw_networkx_edges(G, pos,
+                           edgelist=removed_edges_list,
+                           width=1, alpha=0.5, edge_color='red')
 
     ax = plt.gca()
     ax.margins(0.11)
