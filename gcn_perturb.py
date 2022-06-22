@@ -201,7 +201,7 @@ class GCNSyntheticPerturb(nn.Module):
         # Same as forward but uses P instead of P_hat ==> non-differentiable
         # but needed for actual predictions
 
-        self.P = (torch.sigmoid(self.P_hat_symm) >= 0.5).float()  # threshold P_hat
+        self.P = (torch.sigmoid(self.P_hat_symm) >= 0).float()  # threshold P_hat
         if self.edge_addition:
             A_tilde = self.P + torch.eye(self.num_nodes).cuda()
         else:

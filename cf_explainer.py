@@ -26,7 +26,10 @@ class CFExplainer:
 
     def __init__(
             self, model, graph_ae, sub_adj, sub_feat, n_hid, dropout, lr, n_momentum, cf_optimizer,
-                 sub_labels, y_pred_orig, num_classes, beta, device, AE_threshold, algorithm='cfgnn', edge_addition=True, kappa=10):
+            sub_labels, y_pred_orig, num_classes, beta, device, AE_threshold, algorithm='cfgnn',
+            edge_addition=True, kappa=10
+    ):
+
         super(CFExplainer, self).__init__()
         self.model = model
         self.model.eval()
@@ -131,7 +134,7 @@ class CFExplainer:
                         self.sub_adj.shape[0], loss_total.item(), loss_perturb.item(), loss_graph_dist.item()]
             if l2_AE is not None:
                 cf_stats.append(float(l2_AE.cpu().detach().numpy()))
-        return cf_stats, loss_total
+        return cf_stats, loss_perturb
 
     def explain(
             self,
@@ -151,9 +154,16 @@ class CFExplainer:
         num_cf_examples = 0
         for epoch in range(num_epochs):
             new_example, loss_total = self.train_cf_model_pn(epoch, num_epochs)
-            if new_example != [] and loss_total < best_loss:
-                best_cf_example.append(new_example)
-                best_loss = loss_total
-                num_cf_examples += 1
-                print(f'Epoch {epoch}, Num_cf_examples: {num_cf_examples}')
-        return (best_cf_example)
+            if self.edge_addition:
+                if new_example != [] and loss_total <= best_loss:
+                    best_cf_example.append(new_example)
+                    best_loss = loss_total
+                    num_cf_examples += 1
+                    print(f'Epoch {epoch}, Num_cf_examples: {num_cf_examples}')
+            else:
+                if new_example != []:
+                    best_cf_example.append(new_example)
+                    num_cf_examples += 1
+                    print(f'Epoch {epoch}, Num_cf_examples: {num_cf_examples}')
+
+        return best_cf_example

@@ -109,13 +109,13 @@ def plot_graph(adj, labels, node_idx, name, org_edge_idx=None):
     nx.draw_networkx_nodes(G, pos,
                            nodelist=[node_idx],
                            node_color='yellow',
-                           node_size=100, node_shape='s', label=str(labels[node_idx]))
+                           node_size=50, node_shape='s', label=str(labels[node_idx]))
 
-    nx.draw_networkx_edges(G, pos, width=1, alpha=0.5, edge_color='grey', style=':')
+    nx.draw_networkx_edges(G, pos, width=1, alpha=0.7, edge_color='grey', style=':')
 
     nx.draw_networkx_edges(G, pos,
                            edgelist=pos_edges,
-                           width=1, alpha=0.5)
+                           width=1, alpha=1)
 
     ### plotting removed nodes and edges in red
     a = set(removed_edges.reshape(-1))

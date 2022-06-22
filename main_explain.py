@@ -31,7 +31,7 @@ gae_args = parser.parse_args()
 parser = argparse.ArgumentParser()
 parser.add_argument('--device', type=str, default='cuda', help='torch device.')
 parser.add_argument('--bb-epochs', type=int, default=500, help='Number of epochs to train the ')
-parser.add_argument('--cf-epochs', type=int, default=500, help='Number of epochs to train the ')
+parser.add_argument('--cf-epochs', type=int, default=300, help='Number of epochs to train the ')
 parser.add_argument('--inputdim', type=int, default=10, help='Input dimension')
 parser.add_argument('--hidden', type=int, default=20, help='Number of units in hidden layer 1.')
 parser.add_argument('--n-layers', type=int, default=3, help='Number of units in hidden layer 1.')
@@ -39,7 +39,7 @@ parser.add_argument('--lr', type=float, default=0.005, help='Initial learning ra
 parser.add_argument('--cf-lr', type=float, default=0.01, help='CF-explainer learning rate.')
 parser.add_argument('--dropout', type=float, default=0.2, help='Dropout rate (1 - keep probability).')
 parser.add_argument('--cf-optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
-parser.add_argument('--dataset-str', type=str, default='pubmed', help='type of dataset.')
+parser.add_argument('--dataset-str', type=str, default='citeseer', help='type of dataset.')
 parser.add_argument('--dataset-func', type=str, default='__load__planetoid__', help='type of dataset.')
 parser.add_argument('--beta', type=float, default=0.5, help='beta variable')
 parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
@@ -105,7 +105,7 @@ def main(gae_args, explainer_args):
 
     idx_test = np.arange(0, data['n_nodes'])[data['test_mask'].cpu()]
     test_cf_examples = []
-    for i in idx_test[:20]:
+    for i in idx_test[:10]:
         sub_adj, sub_feat, sub_labels, node_dict, sub_edge_index = get_neighbourhood(
             int(i), data['edge_index'], explainer_args.n_layers + 1, data['features'], data['labels'])
         new_idx = node_dict[int(i)]
@@ -152,7 +152,7 @@ def main(gae_args, explainer_args):
             f'{explainer_args.graph_result_dir}/{explainer_args.dataset_str}/_{i}_sub_adj_{explainer_args.graph_result_name}.png',
             sub_edge_index.t().cpu().numpy()
         )
-        for j, x in enumerate(cf_example[-2:]):
+        for j, x in enumerate(cf_example[-10:]):
             if explainer_args.edge_addition is False:
                 cf_sub_adj = sub_adj.mul(torch.from_numpy(x[2]).cuda())
             else:
