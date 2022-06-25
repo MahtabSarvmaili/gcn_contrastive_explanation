@@ -8,7 +8,7 @@ import os.path as osp
 import scipy.sparse as sp
 
 from torch_geometric.utils import to_dense_adj, train_test_split_edges, dense_to_sparse
-from torch_geometric.datasets import Planetoid, TUDataset
+from torch_geometric.datasets import Planetoid, TUDataset, WebKB
 import torch_geometric.transforms as T
 from torch_geometric.data import Data
 from gae.utils import preprocess_graph, mask_test_edges
@@ -19,15 +19,10 @@ torch.manual_seed(0)
 np.random.seed(0)
 
 
-def __load__planetoid__(dataset_str, transformer):
-    path = osp.join(osp.dirname(osp.realpath(__file__)), '../..', 'data', 'Planetoid')
-    dataset = Planetoid(path, dataset_str, transform=transformer)[0]
-    return dataset
-
-
-def __load__TUD__(dataset_str, transformer):
-    path = osp.join(osp.dirname(osp.realpath(__file__)), '../..', 'data', 'TUD')
-    dataset = TUDataset(root=path, name=dataset_str, transform=transformer)
+def __load__data__(dataset_func, dataset_str, transformer):
+    function = globals()[dataset_func]
+    path = osp.join(osp.dirname(osp.realpath(__file__)), '../..', 'data', dataset_func)
+    dataset = function(path, dataset_str, transform=transformer)[0]
     return dataset
 
 
@@ -81,8 +76,7 @@ def load_data(args):
         T.ToDevice(args.device),
         T.RandomNodeSplit(num_val=0.1, num_test=0.2),
     ])
-    dataset = globals()[args.dataset_func](args.dataset_str, transformer)
-    # dataset = __load__planetoid__(args.dataset_str, transformer)
+    dataset = __load__data__(args.dataset_func, args.dataset_str, transformer)
     train_mask = dataset.train_mask
     val_mask = dataset.val_mask
     test_mask = dataset.test_mask
@@ -127,7 +121,7 @@ def load_data_AE(args):
         T.ToDevice(args.device),
         T.NormalizeFeatures(),
     ])
-    dataset = globals()[args.dataset_func](args.dataset_str, transformer)
+    dataset = __load__data__(args.dataset_func, args.dataset_str, transformer)
     all_edge_index = dataset.edge_index
     dt = train_test_split_edges(dataset, 0.05, 0.1)
     dataset.train_mask = dataset.test_mask = dataset.val_mask = None

@@ -68,10 +68,6 @@ def plot_graph(adj, labels, node_idx, name, org_edge_idx=None):
         return
     edge_list = [(i[0], i[1]) for i in edge_index]
 
-    res = (org_edge_idx[:, None] == edge_index).all(-1).any(-1)
-    removed_edges = org_edge_idx[res == False]
-    removed_edges_list = [(i[0], i[1]) for i in removed_edges]
-
     plt.close()
     G = nx.Graph()
     G.add_nodes_from(range(n_nodes))
@@ -85,7 +81,12 @@ def plot_graph(adj, labels, node_idx, name, org_edge_idx=None):
     a = np.array(edge_list)
     a = a[a[:, 0] == node_idx]
     # only plotting the edges and neighboring nodes of the node_idx
-    pos_edges = [(u, v) for (u, v) in a]
+    pos_edges = [(u, v) for (u, v) in a if (u, v)]
+    res = (org_edge_idx[:, None] == edge_index).all(-1).any(-1)
+    removed_edges = org_edge_idx[res == False]
+    removed_edges = removed_edges[removed_edges[:, 0] == node_idx]
+    removed_edges_list = [(i[0], i[1]) for i in removed_edges]
+
     # plotting the whole adjacency matrix
     # pos_edges = edge_list
     max_label = labels.max() + 1
@@ -111,21 +112,23 @@ def plot_graph(adj, labels, node_idx, name, org_edge_idx=None):
                            node_color='yellow',
                            node_size=50, node_shape='s', label=str(labels[node_idx]))
 
-    nx.draw_networkx_edges(G, pos, width=1, alpha=0.7, edge_color='grey', style=':')
+    nx.draw_networkx_edges(G, pos, width=1, alpha=1, edge_color='grey', style=':')
 
     nx.draw_networkx_edges(G, pos,
                            edgelist=pos_edges,
                            width=1, alpha=1)
 
-    ### plotting removed nodes and edges in red
-    a = set(removed_edges.reshape(-1))
-    nx.draw_networkx_nodes(G, pos,
-                           nodelist=a,
-                           node_color='red',
-                           node_size=20)
-    nx.draw_networkx_edges(G, pos,
-                           edgelist=removed_edges_list,
-                           width=1, alpha=0.5, edge_color='red')
+    # plotting removed nodes and edges in red
+    if len(removed_edges) is not 0:
+        removed_nodes = set(removed_edges.reshape(-1))
+        removed_nodes.remove(node_idx)
+        nx.draw_networkx_nodes(G, pos,
+                               nodelist=removed_nodes,
+                               node_color='red',
+                               node_size=20)
+        nx.draw_networkx_edges(G, pos,
+                               edgelist=removed_edges_list,
+                               width=1, alpha=0.8, edge_color='red', style='-')
 
     ax = plt.gca()
     ax.margins(0.11)

@@ -1,17 +1,10 @@
-# Based on https://github.com/RexYing/gnn-model-explainer/blob/master/explainer/explain.py
 import os
-import math
-import time
 import torch
-import torch.nn as nn
-from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 import torch.nn.functional as F
 import numpy as np
 import torch.optim as optim
-import matplotlib.pyplot as plt
 from torch.nn.utils import clip_grad_norm_
 from utils import get_degree_matrix
-from gae.utils import preprocess_graph
 from gcn_perturb import GCNSyntheticPerturb
 
 torch.manual_seed(0)

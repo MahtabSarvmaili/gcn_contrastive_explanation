@@ -1,11 +1,8 @@
 import argparse
 import sys
 import os
-
-sys.path.append('../..')
 import torch
 import numpy as np
-from torch_geometric.utils import  dense_to_sparse
 from data.data_loader import load_data, load_synthetic, load_synthetic_AE, load_data_AE
 from data.gengraph import gen_syn1, gen_syn2, gen_syn3, gen_syn4
 from utils import normalize_adj, get_neighbourhood
@@ -17,39 +14,7 @@ from evaluation import fidelity_size_sparsity
 torch.manual_seed(0)
 np.random.seed(0)
 
-
-parser = argparse.ArgumentParser()
-parser.add_argument('--device', type=str, default='cuda', help='torch device.')
-parser.add_argument('--epochs', type=int, default=200, help='Number of epochs to train.')
-parser.add_argument('--hidden1', type=int, default=32, help='Number of units in hidden layer 1.')
-parser.add_argument('--hidden2', type=int, default=16, help='Number of units in hidden layer 2.')
-parser.add_argument('--lr', type=float, default=0.01, help='Initial learning rate.')
-parser.add_argument('--dropout', type=float, default=0.0, help='Dropout rate (1 - keep probability).')
-parser.add_argument('--dataset-str', type=str, default='cora', help='type of dataset.')
-gae_args = parser.parse_args()
-
-parser = argparse.ArgumentParser()
-parser.add_argument('--device', type=str, default='cuda', help='torch device.')
-parser.add_argument('--bb-epochs', type=int, default=500, help='Number of epochs to train the ')
-parser.add_argument('--cf-epochs', type=int, default=300, help='Number of epochs to train the ')
-parser.add_argument('--inputdim', type=int, default=10, help='Input dimension')
-parser.add_argument('--hidden', type=int, default=20, help='Number of units in hidden layer 1.')
-parser.add_argument('--n-layers', type=int, default=3, help='Number of units in hidden layer 1.')
-parser.add_argument('--lr', type=float, default=0.005, help='Initial learning rate.')
-parser.add_argument('--cf-lr', type=float, default=0.01, help='CF-explainer learning rate.')
-parser.add_argument('--dropout', type=float, default=0.2, help='Dropout rate (1 - keep probability).')
-parser.add_argument('--cf-optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
-parser.add_argument('--dataset-str', type=str, default='citeseer', help='type of dataset.')
-parser.add_argument('--dataset-func', type=str, default='__load__planetoid__', help='type of dataset.')
-parser.add_argument('--beta', type=float, default=0.5, help='beta variable')
-parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
-parser.add_argument('--edge-addition', type=bool, default=False, help='CF edge_addition')
-parser.add_argument('--algorithm', type=str, default='loss_PN_AE_L1_L2', help='Result directory')
-parser.add_argument('--graph-result-dir', type=str, default='./results', help='Result directory')
-parser.add_argument('--graph-result-name', type=str, default='loss_PN_AE_L1_L2', help='Result name')
-parser.add_argument('--cf_train_loss', type=str, default='loss_PN_AE_L1_L2', help='CF explainer loss function')
-parser.add_argument('--n-momentum', type=float, default=0.5, help='Nesterov momentum')
-explainer_args = parser.parse_args()
+sys.path.append('../..')
 
 
 def main(gae_args, explainer_args):
@@ -64,7 +29,8 @@ def main(gae_args, explainer_args):
         'gen_syn4': 0.62,
         'cora': 0.65,
         'citeseer': 0.6,
-        'pubmed': 0.6
+        'pubmed': 0.6,
+        'cornell':0.6
     }
     model = GCN(
         nfeat=data['feat_dim'],
@@ -89,14 +55,17 @@ def main(gae_args, explainer_args):
         val_mask=data['val_mask'],
         dataset_name=explainer_args.dataset_str
     )
-
     model.eval()
     data['cluster_features'] = model.encode(data['features'], data['adj_norm']).detach()
     output = model(data['features'], data['adj_norm'])
-    y_pred_orig = torch.argmax(output[data['test_mask']], dim=1)
+    y_pred_orig = torch.argmax(output, dim=1)
     print("test set y_true counts: {}".format(
         np.unique(data['labels'][data['test_mask']].cpu().detach().numpy(), return_counts=True)))
-    print("test set y_pred_orig counts: {}".format(np.unique(y_pred_orig.cpu().detach().numpy(), return_counts=True)))
+    print(
+        "test set y_pred_orig counts: {}".format(
+            np.unique(y_pred_orig[data['test_mask']].cpu().detach().numpy(), return_counts=True)
+        )
+    )
     print("Training GNN is finished.")
 
     print("Training AE.")
@@ -109,7 +78,6 @@ def main(gae_args, explainer_args):
         sub_adj, sub_feat, sub_labels, node_dict, sub_edge_index = get_neighbourhood(
             int(i), data['edge_index'], explainer_args.n_layers + 1, data['features'], data['labels'])
         new_idx = node_dict[int(i)]
-        sub_adj_np = sub_adj.cpu().numpy()
         # Check that original model gives same prediction on full graph and subgraph
         with torch.no_grad():
             print("Output original model, full adj: {}".format(output[i]))
@@ -130,7 +98,7 @@ def main(gae_args, explainer_args):
             lr=explainer_args.cf_lr,
             n_momentum=explainer_args.n_momentum,
             sub_labels=sub_labels,
-            y_pred_orig=y_pred_orig[i],
+            y_pred_orig=sub_labels[new_idx],
             num_classes=data['num_classes'],
             beta=explainer_args.beta,
             device=explainer_args.device,
@@ -149,7 +117,11 @@ def main(gae_args, explainer_args):
             sub_adj.cpu().numpy(),
             sub_labels.cpu().numpy(),
             new_idx,
-            f'{explainer_args.graph_result_dir}/{explainer_args.dataset_str}/_{i}_sub_adj_{explainer_args.graph_result_name}.png',
+            f'{explainer_args.graph_result_dir}/'
+            f'{explainer_args.dataset_str}/'
+            f'edge_addition_{explainer_args.edge_addition}/'
+            f'{explainer_args.algorithm}/'
+            f'_{i}_sub_adj_{explainer_args.graph_result_name}.png',
             sub_edge_index.t().cpu().numpy()
         )
         for j, x in enumerate(cf_example[-10:]):
@@ -159,9 +131,14 @@ def main(gae_args, explainer_args):
                 cf_sub_adj = x[2]
             plot_graph(
                 cf_sub_adj,
-                x[8].cpu().numpy(),
+                x[8].numpy(),
                 new_idx,
-                f'{explainer_args.graph_result_dir}/{explainer_args.dataset_str}/_{i}_counter_factual_{j}_{explainer_args.graph_result_name}.png',
+                f'{explainer_args.graph_result_dir}/'
+                f'{explainer_args.dataset_str}/'
+                f'edge_addition_{explainer_args.edge_addition}/'
+                f'{explainer_args.algorithm}/'
+                f'_{i}_counter_factual_{j}_'
+                f'{explainer_args.graph_result_name}.png',
                 sub_edge_index.t().cpu().numpy(),
             )
         fidelity_size_sparsity(
@@ -170,13 +147,57 @@ def main(gae_args, explainer_args):
             sub_adj,
             cf_example,
             explainer_args.edge_addition,
-            f'{explainer_args.graph_result_dir}/{explainer_args.dataset_str}/_{i}_counter_factual_{explainer_args.graph_result_name}'
+            f'{explainer_args.graph_result_dir}/'
+            f'{explainer_args.dataset_str}/'
+            f'edge_addition_{explainer_args.edge_addition}/'
+            f'{explainer_args.algorithm}/'
+            f'_{i}_counter_factual_{explainer_args.graph_result_name}'
         )
         print('yes!')
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--device', type=str, default='cuda', help='torch device.')
+    parser.add_argument('--epochs', type=int, default=200, help='Number of epochs to train.')
+    parser.add_argument('--hidden1', type=int, default=32, help='Number of units in hidden layer 1.')
+    parser.add_argument('--hidden2', type=int, default=16, help='Number of units in hidden layer 2.')
+    parser.add_argument('--lr', type=float, default=0.01, help='Initial learning rate.')
+    parser.add_argument('--dropout', type=float, default=0.0, help='Dropout rate (1 - keep probability).')
+    parser.add_argument('--dataset-str', type=str, default='cora', help='type of dataset.')
+    gae_args = parser.parse_args()
 
-    if os.listdir(explainer_args.graph_result_dir).__contains__(explainer_args.dataset_str) is False:
-        os.mkdir(f'{explainer_args.graph_result_dir}/{explainer_args.dataset_str}')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--device', type=str, default='cuda', help='torch device.')
+    parser.add_argument('--bb-epochs', type=int, default=500, help='Number of epochs to train the ')
+    parser.add_argument('--cf-epochs', type=int, default=300, help='Number of epochs to train the ')
+    parser.add_argument('--inputdim', type=int, default=10, help='Input dimension')
+    parser.add_argument('--hidden', type=int, default=20, help='Number of units in hidden layer 1.')
+    parser.add_argument('--n-layers', type=int, default=3, help='Number of units in hidden layer 1.')
+    parser.add_argument('--lr', type=float, default=0.005, help='Initial learning rate.')
+    parser.add_argument('--cf-lr', type=float, default=0.01, help='CF-explainer learning rate.')
+    parser.add_argument('--dropout', type=float, default=0.2, help='Dropout rate (1 - keep probability).')
+    parser.add_argument('--cf-optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
+    parser.add_argument('--dataset-str', type=str, default='cora', help='type of dataset.')
+    parser.add_argument('--dataset-func', type=str, default='Planetoid', help='type of dataset.')
+    parser.add_argument('--beta', type=float, default=0.5, help='beta variable')
+    parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
+    parser.add_argument('--edge-addition', type=bool, default=False, help='CF edge_addition')
+    parser.add_argument('--algorithm', type=str, default='loss_PN_AE_L1_L2', help='Result directory')
+    parser.add_argument('--graph-result-dir', type=str, default='./results', help='Result directory')
+    parser.add_argument('--graph-result-name', type=str, default='loss_PN_AE_L1_L2', help='Result name')
+    parser.add_argument('--cf_train_loss', type=str, default='loss_PN_AE_L1_L2', help='CF explainer loss function')
+    parser.add_argument('--n-momentum', type=float, default=0.5, help='Nesterov momentum')
+    explainer_args = parser.parse_args()
+
+    if os.listdir(f'{explainer_args.graph_result_dir}/'
+                  f'{explainer_args.dataset_str}/'
+                  f'edge_addition_{explainer_args.edge_addition}/'
+                  ).__contains__(explainer_args.algorithm) is False:
+        os.mkdir(
+            f'{explainer_args.graph_result_dir}/'
+            f'{explainer_args.dataset_str}/'
+            f'edge_addition_{explainer_args.edge_addition}/'
+            f'{explainer_args.algorithm}'
+        )
     main(gae_args, explainer_args)
