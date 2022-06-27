@@ -30,7 +30,8 @@ def main(gae_args, explainer_args):
         'cora': 0.65,
         'citeseer': 0.6,
         'pubmed': 0.6,
-        'cornell':0.6
+        'cornell':0.6,
+        'texas':0.6
     }
     model = GCN(
         nfeat=data['feat_dim'],
@@ -75,85 +76,89 @@ def main(gae_args, explainer_args):
     idx_test = np.arange(0, data['n_nodes'])[data['test_mask'].cpu()]
     test_cf_examples = []
     for i in idx_test[:10]:
-        sub_adj, sub_feat, sub_labels, node_dict, sub_edge_index = get_neighbourhood(
-            int(i), data['edge_index'], explainer_args.n_layers + 1, data['features'], data['labels'])
-        new_idx = node_dict[int(i)]
-        # Check that original model gives same prediction on full graph and subgraph
-        with torch.no_grad():
-            print("Output original model, full adj: {}".format(output[i]))
-            print(
-                "Output original model, sub adj: {}".format(
-                    model(sub_feat, normalize_adj(sub_adj, explainer_args.device))[new_idx]
+        try:
+            sub_adj, sub_feat, sub_labels, node_dict, sub_edge_index = get_neighbourhood(
+                int(i), data['edge_index'], explainer_args.n_layers + 1, data['features'], data['labels'])
+            new_idx = node_dict[int(i)]
+            # Check that original model gives same prediction on full graph and subgraph
+            with torch.no_grad():
+                print("Output original model, full adj: {}".format(output[i]))
+                print(
+                    "Output original model, sub adj: {}".format(
+                        model(sub_feat, normalize_adj(sub_adj, explainer_args.device))[new_idx]
+                    )
                 )
+            # Need to instantitate new cf model every time because size of P changes based on size of sub_adj
+            explainer = CFExplainer(
+                model=model,
+                graph_ae=graph_ae,
+                sub_adj=sub_adj,
+                sub_feat=sub_feat,
+                n_hid=explainer_args.hidden,
+                dropout=explainer_args.dropout,
+                cf_optimizer=explainer_args.cf_optimizer,
+                lr=explainer_args.cf_lr,
+                n_momentum=explainer_args.n_momentum,
+                sub_labels=sub_labels,
+                y_pred_orig=sub_labels[new_idx],
+                num_classes=data['num_classes'],
+                beta=explainer_args.beta,
+                device=explainer_args.device,
+                AE_threshold=AE_threshold[explainer_args.dataset_str],
+                algorithm=explainer_args.algorithm,
+                edge_addition=explainer_args.edge_addition
             )
-        # Need to instantitate new cf model every time because size of P changes based on size of sub_adj
-        explainer = CFExplainer(
-            model=model,
-            graph_ae=graph_ae,
-            sub_adj=sub_adj,
-            sub_feat=sub_feat,
-            n_hid=explainer_args.hidden,
-            dropout=explainer_args.dropout,
-            cf_optimizer=explainer_args.cf_optimizer,
-            lr=explainer_args.cf_lr,
-            n_momentum=explainer_args.n_momentum,
-            sub_labels=sub_labels,
-            y_pred_orig=sub_labels[new_idx],
-            num_classes=data['num_classes'],
-            beta=explainer_args.beta,
-            device=explainer_args.device,
-            AE_threshold=AE_threshold[explainer_args.dataset_str],
-            algorithm=explainer_args.algorithm,
-            edge_addition=explainer_args.edge_addition
-        )
-        explainer.cf_model.cuda()
-        cf_example = explainer.explain(
-            node_idx=i,
-            new_idx=new_idx,
-            num_epochs=explainer_args.cf_epochs
-        )
-        test_cf_examples.append(cf_example)
-        plot_graph(
-            sub_adj.cpu().numpy(),
-            sub_labels.cpu().numpy(),
-            new_idx,
-            f'{explainer_args.graph_result_dir}/'
-            f'{explainer_args.dataset_str}/'
-            f'edge_addition_{explainer_args.edge_addition}/'
-            f'{explainer_args.algorithm}/'
-            f'_{i}_sub_adj_{explainer_args.graph_result_name}.png',
-            sub_edge_index.t().cpu().numpy()
-        )
-        for j, x in enumerate(cf_example[-10:]):
-            if explainer_args.edge_addition is False:
-                cf_sub_adj = sub_adj.mul(torch.from_numpy(x[2]).cuda())
-            else:
-                cf_sub_adj = x[2]
+            explainer.cf_model.cuda()
+            cf_example = explainer.explain(
+                node_idx=i,
+                new_idx=new_idx,
+                num_epochs=explainer_args.cf_epochs
+            )
+            test_cf_examples.append(cf_example)
             plot_graph(
-                cf_sub_adj,
-                x[8].numpy(),
+                sub_adj.cpu().numpy(),
+                sub_labels.cpu().numpy(),
                 new_idx,
                 f'{explainer_args.graph_result_dir}/'
                 f'{explainer_args.dataset_str}/'
                 f'edge_addition_{explainer_args.edge_addition}/'
                 f'{explainer_args.algorithm}/'
-                f'_{i}_counter_factual_{j}_'
-                f'{explainer_args.graph_result_name}.png',
-                sub_edge_index.t().cpu().numpy(),
+                f'_{i}_sub_adj_{explainer_args.graph_result_name}.png',
+                sub_edge_index.t().cpu().numpy()
             )
-        fidelity_size_sparsity(
-            model,
-            sub_feat,
-            sub_adj,
-            cf_example,
-            explainer_args.edge_addition,
-            f'{explainer_args.graph_result_dir}/'
-            f'{explainer_args.dataset_str}/'
-            f'edge_addition_{explainer_args.edge_addition}/'
-            f'{explainer_args.algorithm}/'
-            f'_{i}_counter_factual_{explainer_args.graph_result_name}'
-        )
-        print('yes!')
+            for j, x in enumerate(cf_example[-10:]):
+                if explainer_args.edge_addition is False:
+                    cf_sub_adj = sub_adj.mul(torch.from_numpy(x[2]).cuda())
+                else:
+                    cf_sub_adj = x[2]
+                plot_graph(
+                    cf_sub_adj,
+                    x[8].numpy(),
+                    new_idx,
+                    f'{explainer_args.graph_result_dir}/'
+                    f'{explainer_args.dataset_str}/'
+                    f'edge_addition_{explainer_args.edge_addition}/'
+                    f'{explainer_args.algorithm}/'
+                    f'_{i}_counter_factual_{j}_'
+                    f'{explainer_args.graph_result_name}.png',
+                    sub_edge_index.t().cpu().numpy(),
+                )
+            fidelity_size_sparsity(
+                model,
+                sub_feat,
+                sub_adj,
+                cf_example,
+                explainer_args.edge_addition,
+                f'{explainer_args.graph_result_dir}/'
+                f'{explainer_args.dataset_str}/'
+                f'edge_addition_{explainer_args.edge_addition}/'
+                f'{explainer_args.algorithm}/'
+                f'_{i}_counter_factual_{explainer_args.graph_result_name}'
+            )
+            print('yes!')
+
+        except:
+            pass
 
 
 if __name__ == '__main__':
@@ -178,8 +183,8 @@ if __name__ == '__main__':
     parser.add_argument('--cf-lr', type=float, default=0.01, help='CF-explainer learning rate.')
     parser.add_argument('--dropout', type=float, default=0.2, help='Dropout rate (1 - keep probability).')
     parser.add_argument('--cf-optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset-str', type=str, default='cora', help='type of dataset.')
-    parser.add_argument('--dataset-func', type=str, default='Planetoid', help='type of dataset.')
+    parser.add_argument('--dataset-str', type=str, default='cornell', help='type of dataset.')
+    parser.add_argument('--dataset-func', type=str, default='WebKB', help='type of dataset.')
     parser.add_argument('--beta', type=float, default=0.5, help='beta variable')
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
     parser.add_argument('--edge-addition', type=bool, default=False, help='CF edge_addition')

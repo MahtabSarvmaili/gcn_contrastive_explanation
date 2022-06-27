@@ -118,14 +118,16 @@ def normalize_adj(adj, device):
 
 
 def get_neighbourhood(node_idx, edge_index, n_hops, features, labels):
+
     edge_subset = k_hop_subgraph(node_idx, n_hops, edge_index)  # Get all nodes involved
     edge_subset_relabel = subgraph(edge_subset[0], edge_index, relabel_nodes=True)  # Get relabelled subset of edges
+    assert edge_subset[0].shape[0] > 2, "Number of nodes involved in the subgraph is less than 2"
     sub_adj = to_dense_adj(edge_subset_relabel[0]).squeeze()
     sub_feat = features[edge_subset[0], :]
     sub_labels = labels[edge_subset[0]]
     new_index = np.array([i for i in range(len(edge_subset[0]))])
     node_dict = dict(zip(edge_subset[0].cpu().numpy(), new_index))  # Maps orig labels to new
-    # print("Num nodes in subgraph: {}".format(len(edge_subset[0])))
+
     return sub_adj, sub_feat, sub_labels, node_dict, edge_subset_relabel[0]
 
 
