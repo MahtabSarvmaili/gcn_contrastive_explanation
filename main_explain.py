@@ -31,7 +31,8 @@ def main(gae_args, explainer_args):
         'citeseer': 0.6,
         'pubmed': 0.6,
         'cornell':0.6,
-        'texas':0.6
+        'texas':0.6,
+        'CS': 0.6
     }
     model = GCN(
         nfeat=data['feat_dim'],
@@ -126,23 +127,24 @@ def main(gae_args, explainer_args):
                 f'_{i}_sub_adj_{explainer_args.graph_result_name}.png',
                 sub_edge_index.t().cpu().numpy()
             )
-            for j, x in enumerate(cf_example[-10:]):
+            for j, x in enumerate(cf_example):
                 if explainer_args.edge_addition is False:
                     cf_sub_adj = sub_adj.mul(torch.from_numpy(x[2]).cuda())
                 else:
                     cf_sub_adj = x[2]
-                plot_graph(
-                    cf_sub_adj,
-                    x[8].numpy(),
-                    new_idx,
-                    f'{explainer_args.graph_result_dir}/'
-                    f'{explainer_args.dataset_str}/'
-                    f'edge_addition_{explainer_args.edge_addition}/'
-                    f'{explainer_args.algorithm}/'
-                    f'_{i}_counter_factual_{j}_'
-                    f'{explainer_args.graph_result_name}.png',
-                    sub_edge_index.t().cpu().numpy(),
-                )
+                if cf_sub_adj.sum()<sub_adj.sum():
+                    plot_graph(
+                        cf_sub_adj,
+                        x[8].numpy(),
+                        new_idx,
+                        f'{explainer_args.graph_result_dir}/'
+                        f'{explainer_args.dataset_str}/'
+                        f'edge_addition_{explainer_args.edge_addition}/'
+                        f'{explainer_args.algorithm}/'
+                        f'_{i}_counter_factual_{j}_'
+                        f'{explainer_args.graph_result_name}.png',
+                        sub_edge_index.t().cpu().numpy(),
+                    )
             fidelity_size_sparsity(
                 model,
                 sub_feat,
@@ -183,8 +185,8 @@ if __name__ == '__main__':
     parser.add_argument('--cf-lr', type=float, default=0.01, help='CF-explainer learning rate.')
     parser.add_argument('--dropout', type=float, default=0.2, help='Dropout rate (1 - keep probability).')
     parser.add_argument('--cf-optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset-str', type=str, default='cornell', help='type of dataset.')
-    parser.add_argument('--dataset-func', type=str, default='WebKB', help='type of dataset.')
+    parser.add_argument('--dataset-str', type=str, default='CS', help='type of dataset.')
+    parser.add_argument('--dataset-func', type=str, default='Coauthor', help='type of dataset.')
     parser.add_argument('--beta', type=float, default=0.5, help='beta variable')
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
     parser.add_argument('--edge-addition', type=bool, default=False, help='CF edge_addition')

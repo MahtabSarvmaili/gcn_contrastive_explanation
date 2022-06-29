@@ -8,7 +8,7 @@ import os.path as osp
 import scipy.sparse as sp
 
 from torch_geometric.utils import to_dense_adj, train_test_split_edges, dense_to_sparse
-from torch_geometric.datasets import Planetoid, TUDataset, WebKB
+from torch_geometric.datasets import Planetoid, TUDataset, WebKB, GemsecDeezer, Amazon, Coauthor
 import torch_geometric.transforms as T
 from torch_geometric.data import Data
 from gae.utils import preprocess_graph, mask_test_edges
@@ -21,7 +21,7 @@ np.random.seed(0)
 
 def __load__data__(dataset_func, dataset_str, transformer):
     function = globals()[dataset_func]
-    path = osp.join(osp.dirname(osp.realpath(__file__)), '../..', 'data', dataset_func)
+    path = osp.join(osp.dirname(osp.realpath(__file__)), dataset_func).replace("\\", "/")
     dataset = function(path, dataset_str, transform=transformer)[0]
     return dataset
 
