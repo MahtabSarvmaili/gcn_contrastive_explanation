@@ -132,7 +132,7 @@ def main(gae_args, explainer_args):
                     cf_sub_adj = sub_adj.mul(torch.from_numpy(x[2]).cuda())
                 else:
                     cf_sub_adj = x[2]
-                if cf_sub_adj.sum()<sub_adj.sum():
+                if cf_sub_adj.sum()< sub_adj.sum() and cf_sub_adj.sum()>3:
                     plot_graph(
                         cf_sub_adj,
                         x[8].numpy(),
@@ -182,11 +182,11 @@ if __name__ == '__main__':
     parser.add_argument('--hidden', type=int, default=20, help='Number of units in hidden layer 1.')
     parser.add_argument('--n-layers', type=int, default=3, help='Number of units in hidden layer 1.')
     parser.add_argument('--lr', type=float, default=0.005, help='Initial learning rate.')
-    parser.add_argument('--cf-lr', type=float, default=0.01, help='CF-explainer learning rate.')
+    parser.add_argument('--cf-lr', type=float, default=0.009, help='CF-explainer learning rate.')
     parser.add_argument('--dropout', type=float, default=0.2, help='Dropout rate (1 - keep probability).')
     parser.add_argument('--cf-optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset-str', type=str, default='CS', help='type of dataset.')
-    parser.add_argument('--dataset-func', type=str, default='Coauthor', help='type of dataset.')
+    parser.add_argument('--dataset-str', type=str, default='cora', help='type of dataset.')
+    parser.add_argument('--dataset-func', type=str, default='Planetoid', help='type of dataset.')
     parser.add_argument('--beta', type=float, default=0.5, help='beta variable')
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
     parser.add_argument('--edge-addition', type=bool, default=False, help='CF edge_addition')

@@ -116,15 +116,14 @@ class CFExplainer:
             )
             print(" ")
         cf_stats = []
-
         if y_pred_new_actual != self.y_pred_orig:
-            output_actual = self.cf_model.forward_prediction(self.x, logits=False)
             cf_stats = [self.node_idx.item(), self.new_idx.item(),
                         cf_adj.cpu().detach().numpy(), self.sub_adj.cpu().detach().numpy(),
                         self.y_pred_orig.item(), y_pred_new.item(),
                         y_pred_new_actual.item(), self.sub_labels[self.new_idx].cpu().detach().numpy(),
-                        output_actual.argmax(dim=1).cpu(),
-                        self.sub_adj.shape[0], loss_total.item(), loss_perturb.item(), loss_graph_dist.item()]
+                        output_actual.argmax(dim=1).cpu(), self.sub_adj.shape[0],
+                        loss_total.item(), loss_perturb.item(),
+                        loss_graph_dist.item()]
             if l2_AE is not None:
                 cf_stats.append(float(l2_AE.cpu().detach().numpy()))
         return cf_stats, loss_perturb

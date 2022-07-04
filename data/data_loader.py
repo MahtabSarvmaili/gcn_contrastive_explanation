@@ -36,7 +36,7 @@ def __prepare_edge_class_dataset__(dataset, device):
     adj_train, train_edges, val_edges, val_edges_false, test_edges, test_edges_false, edges = mask_test_edges(adj)
     adj = adj_train
     # Some preprocessing
-    adj_norm = preprocess_graph(adj, device)
+    adj_norm = normalize_adj(adj, device)
     adj_label = adj_train + sp.eye(adj_train.shape[0])
     # adj_label = sparse_to_tuple(adj_label)
     adj_label = torch.FloatTensor(adj_label.toarray())
@@ -84,7 +84,7 @@ def load_data(args):
     labels = dataset.y
 
     adj = to_dense_adj(dataset.edge_index).squeeze(dim=0)
-    adj_norm = preprocess_graph(adj.cpu(), args.device)
+    adj_norm = normalize_adj(adj, args.device)
 
     n_nodes, feat_dim, num_classes = dataset.num_nodes, dataset.num_features, len(dataset.y.unique())
     # Store original adjacency matrix (without diagonal entries) for later

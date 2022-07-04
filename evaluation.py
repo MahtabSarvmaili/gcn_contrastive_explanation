@@ -56,3 +56,7 @@ def fidelity_size_sparsity(model, sub_feat, sub_adj, cf_examples, edge_addition,
     else:
         df = pd.DataFrame(res, columns=['fidelity', 'sparsity', 'l1_dist'])
     df.to_csv(f'{name}.csv', index=False)
+
+
+# def remove_edges(edge_list, adj, model):
+#     for x in edge_list:
