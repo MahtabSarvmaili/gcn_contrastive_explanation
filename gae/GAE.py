@@ -42,3 +42,4 @@ def gae(args, data):
                 print("Epoch {} - Loss: {} ROC_AUC: {} Precision: {}".format(epoch, loss.cpu().item(), roc_auc, ap))
                 trigger_times = 0
             prev_prec = ap
+    return model

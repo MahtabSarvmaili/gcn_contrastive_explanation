@@ -116,7 +116,10 @@ class CFExplainer:
             )
             print(" ")
         cf_stats = []
-        if y_pred_new_actual != self.y_pred_orig:
+        outputs_af = self.cf_model.forward_prediction(self.x, logits=False)
+        pred_af = torch.argmax(outputs_af[self.new_idx])
+        if y_pred_new_actual != self.y_pred_orig and pred_af == y_pred_new_actual:
+
             cf_stats = [self.node_idx.item(), self.new_idx.item(),
                         cf_adj.cpu().detach().numpy(), self.sub_adj.cpu().detach().numpy(),
                         self.y_pred_orig.item(), y_pred_new.item(),

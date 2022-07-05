@@ -10,7 +10,7 @@ from model import GCN, train
 from cf_explainer import CFExplainer
 from gae.GAE import gae
 from visualization import plot_graph
-from evaluation import fidelity_size_sparsity
+from evaluation import fidelity_size_sparsity, removed_1by1_edges
 torch.manual_seed(0)
 np.random.seed(0)
 
@@ -20,8 +20,8 @@ sys.path.append('../..')
 def main(gae_args, explainer_args):
     data = load_data(explainer_args)
     data_AE = load_data_AE(explainer_args)
-    # data =load_synthetic(gen_syn3, device=explainer_args.device)
-    # data_AE = load_synthetic_AE(gen_syn3, device=explainer_args.device)
+    # data =load_synthetic(gen_syn1, device=explainer_args.device)
+    # data_AE = load_synthetic_AE(gen_syn1, device=explainer_args.device)
     AE_threshold = {
         'gen_syn1': 0.5,
         'gen_syn2': 0.65,
@@ -144,6 +144,7 @@ def main(gae_args, explainer_args):
                         f'_{i}_counter_factual_{j}_'
                         f'{explainer_args.graph_result_name}.png',
                         sub_edge_index.t().cpu().numpy(),
+                        plot_grey_edges=True
                     )
             fidelity_size_sparsity(
                 model,
@@ -155,7 +156,18 @@ def main(gae_args, explainer_args):
                 f'{explainer_args.dataset_str}/'
                 f'edge_addition_{explainer_args.edge_addition}/'
                 f'{explainer_args.algorithm}/'
-                f'_{i}_counter_factual_{explainer_args.graph_result_name}'
+                f'_{i}_counter_factual_{explainer_args.graph_result_name}_sub_graph_'
+            )
+            removed_1by1_edges(
+                sub_edge_index.t(),
+                sub_adj,
+                sub_feat,
+                model,
+                f'{explainer_args.graph_result_dir}/'
+                f'{explainer_args.dataset_str}/'
+                f'edge_addition_{explainer_args.edge_addition}/'
+                f'{explainer_args.algorithm}/'
+                f'_{i}_counter_factual_{explainer_args.graph_result_name}_removed_edges'
             )
             print('yes!')
 

@@ -58,5 +58,18 @@ def fidelity_size_sparsity(model, sub_feat, sub_adj, cf_examples, edge_addition,
     df.to_csv(f'{name}.csv', index=False)
 
 
-# def remove_edges(edge_list, adj, model):
-#     for x in edge_list:
+def removed_1by1_edges(edge_list, adj, features, model, name):
+    adj1 = adj.clone()
+    b = model.forward(features, adj, logit=False)
+    res = []
+    for x in edge_list:
+        adj1[x[0]][x[1]] = 0
+        adj1[x[1]][x[0]] = 0
+        a = model(features, adj1)
+        f = (a.argmax(dim=1) == b.argmax(dim=1)).sum() / a.__len__()
+        f = f.cpu().numpy()
+        s = (adj1 < adj).sum() / adj.sum()
+        s = s.cpu().numpy()
+        res.append([f, s])
+    df = pd.DataFrame(res, columns=['fidelity', 'sparsity'])
+    df.to_csv(f'{name}.csv', index=False)
