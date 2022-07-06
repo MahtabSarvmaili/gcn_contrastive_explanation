@@ -46,15 +46,14 @@ def fidelity_size_sparsity(model, sub_feat, sub_adj, cf_examples, edge_addition,
         s = s.cpu().numpy()
         l = torch.linalg.norm(cf_adj, ord=1)
         l = l.cpu().numpy()
-        if len(cf_examples[i]) == 14:
-            ae = cf_examples[i][-1]
-            res.append([f, s, l, ae])
-        else:
-            res.append([f, s, l])
-    if len(cf_examples[0])==14:
-        df = pd.DataFrame(res, columns=['fidelity', 'sparsity', 'l1_dist', 'ae_dist'])
-    else:
-        df = pd.DataFrame(res, columns=['fidelity', 'sparsity', 'l1_dist'])
+        lpur = cf_examples[i][11]
+        lgd = cf_examples[i][12]
+        l1 = cf_examples[i][13]
+        l2 = cf_examples[i][14]
+        ae = cf_examples[i][15]
+        res.append([f, s, l, lpur, lgd, l1, l2, ae])
+
+    df = pd.DataFrame(res, columns=['fidelity', 'sparsity', 'l1_norm', 'loss_perturb', 'loss_dist', 'l1_p_hat', 'l2_p_hat', 'ae_dist'])
     df.to_csv(f'{name}.csv', index=False)
 
 

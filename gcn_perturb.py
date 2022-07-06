@@ -1,4 +1,5 @@
 import numpy as np
+import pylab as p
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -241,7 +242,7 @@ class GCNSyntheticPerturb(nn.Module):
 
         # Zero-out loss_pred with pred_same if prediction flips
         loss_total = pred_same * loss_pred + self.beta * loss_graph_dist
-        return loss_total, loss_pred, loss_graph_dist, cf_adj
+        return loss_total, loss_pred, loss_graph_dist, torch.inf, torch.inf, torch.inf, cf_adj
 
     def loss_PN_L1_L2(self, output, y_orig_onehot):
 
@@ -255,7 +256,7 @@ class GCNSyntheticPerturb(nn.Module):
         L1 = torch.linalg.norm(self.P_hat_symm, ord=1)
         L2 = torch.linalg.norm(self.P_hat_symm, ord=2)
         loss_total = loss_perturb + self.beta * loss_graph_dist + self.psi*L1 + L2
-        return loss_total, loss_perturb, loss_graph_dist, cf_adj
+        return loss_total, loss_perturb, loss_graph_dist, L1.item(), L2.item(), torch.inf, cf_adj
 
     def loss_PN_AE_L1_L2(self, graph_AE, x, output, y_orig_onehot):
 
@@ -272,7 +273,7 @@ class GCNSyntheticPerturb(nn.Module):
         L1 = torch.linalg.norm(self.P_hat_symm, ord=1)
         L2 = torch.linalg.norm(self.P_hat_symm, ord=2)
         loss_total = loss_perturb + self.beta * loss_graph_dist + self.psi*L1 + L2 + self.gamma*l2_AE
-        return loss_total, loss_perturb, loss_graph_dist, l2_AE, cf_adj
+        return loss_total, loss_perturb, loss_graph_dist, L1.item(), L2.item(), l2_AE.item(), cf_adj
 
     def loss_PN_AE_(self, graph_AE, x, output, y_orig_onehot):
 
@@ -287,7 +288,7 @@ class GCNSyntheticPerturb(nn.Module):
         l2_AE = torch.dist(cf_adj, reconst_P, p=2)
         loss_graph_dist = torch.dist(cf_adj, self.adj.cuda(), p=1) / 2
         loss_total = loss_perturb + self.beta * loss_graph_dist
-        return loss_total, loss_perturb, loss_graph_dist, l2_AE, cf_adj
+        return loss_total, loss_perturb, loss_graph_dist, torch.inf, torch.inf, l2_AE.item(), cf_adj
 
     def loss_PN_AE_pure(self, graph_AE, x, output, y_orig_onehot):
         loss_perturb = pertinent_negative_loss(output, y_orig_onehot, self.const, self.kappa)
@@ -301,4 +302,4 @@ class GCNSyntheticPerturb(nn.Module):
         l2_AE = torch.dist(reconst_P, cf_adj)/2
         loss_graph_dist = torch.dist(cf_adj, self.adj.cuda(), p=1) / 2
         loss_total = loss_perturb + self.gamma*l2_AE #+ self.beta * loss_graph_dist+ self.gamma*l2_AE
-        return loss_total, loss_perturb, loss_graph_dist, l2_AE, cf_adj
+        return loss_total, loss_perturb, loss_graph_dist, torch.inf, torch.inf, l2_AE.item(), cf_adj

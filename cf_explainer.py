@@ -82,23 +82,23 @@ class CFExplainer:
         self.cf_optimizer.zero_grad()
         output, output_actual, y_pred_new, y_pred_new_actual = self.predict_cf_model()
         if self.algorithm == 'cfgnn':
-            loss_total, loss_perturb, loss_graph_dist, cf_adj = self.cf_model.loss(
+            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss(
                 output[self.new_idx], self.y_pred_orig, y_pred_new_actual
             )
         elif self.algorithm == 'loss_PN_L1_L2':
-            loss_total, loss_perturb, loss_graph_dist, cf_adj = self.cf_model.loss_PN_L1_L2(
+            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss_PN_L1_L2(
                 output[self.new_idx], self.y_orig_onehot
             )
         elif self.algorithm == 'loss_PN_AE_L1_L2':
-            loss_total, loss_perturb, loss_graph_dist, l2_AE, cf_adj = self.cf_model.loss_PN_AE_L1_L2(
+            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss_PN_AE_L1_L2(
                 self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot
             )
         elif self.algorithm == 'loss_PN_AE_pure':
-            loss_total, loss_perturb, loss_graph_dist, l2_AE, cf_adj = self.cf_model.loss_PN_AE_pure(
+            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss_PN_AE_pure(
                 self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot
             )
         else:
-            loss_total, loss_perturb, loss_graph_dist, l2_AE, cf_adj = self.cf_model.loss_PN_AE_(
+            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss_PN_AE_(
                 self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot
             )
         loss_total.backward()
@@ -116,19 +116,18 @@ class CFExplainer:
             )
             print(" ")
         cf_stats = []
-        outputs_af = self.cf_model.forward_prediction(self.x, logits=False)
-        pred_af = torch.argmax(outputs_af[self.new_idx])
-        if y_pred_new_actual != self.y_pred_orig and pred_af == y_pred_new_actual:
+        if y_pred_new_actual != self.y_pred_orig:
 
-            cf_stats = [self.node_idx.item(), self.new_idx.item(),
-                        cf_adj.cpu().detach().numpy(), self.sub_adj.cpu().detach().numpy(),
-                        self.y_pred_orig.item(), y_pred_new.item(),
-                        y_pred_new_actual.item(), self.sub_labels[self.new_idx].cpu().detach().numpy(),
-                        output_actual.argmax(dim=1).cpu(), self.sub_adj.shape[0],
-                        loss_total.item(), loss_perturb.item(),
-                        loss_graph_dist.item()]
-            if l2_AE is not None:
-                cf_stats.append(float(l2_AE.cpu().detach().numpy()))
+            cf_stats = [
+                self.node_idx.item(), self.new_idx.item(),
+                cf_adj.cpu().detach().numpy(), self.sub_adj.cpu().detach().numpy(),
+                self.y_pred_orig.item(), y_pred_new.item(),
+                y_pred_new_actual.item(), self.sub_labels[self.new_idx].cpu().detach().numpy(),
+                output_actual.argmax(dim=1).cpu(), self.sub_adj.shape[0],
+                loss_total.item(), loss_perturb.item(),
+                loss_graph_dist.item(), L1.item(),
+                L2.item(), l2_AE.item(),
+            ]
         return cf_stats, loss_perturb
 
     def explain(
@@ -156,9 +155,10 @@ class CFExplainer:
                     num_cf_examples += 1
                     print(f'Epoch {epoch}, Num_cf_examples: {num_cf_examples}')
             else:
-                if new_example != []:
+                if new_example != [] and loss_total >= best_loss:
                     best_cf_example.append(new_example)
                     num_cf_examples += 1
+                    best_loss = loss_total
                     print(f'Epoch {epoch}, Num_cf_examples: {num_cf_examples}')
 
         return best_cf_example

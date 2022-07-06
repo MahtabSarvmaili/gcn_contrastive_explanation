@@ -158,19 +158,7 @@ def main(gae_args, explainer_args):
                 f'{explainer_args.algorithm}/'
                 f'_{i}_counter_factual_{explainer_args.graph_result_name}_sub_graph_'
             )
-            removed_1by1_edges(
-                sub_edge_index.t(),
-                sub_adj,
-                sub_feat,
-                model,
-                f'{explainer_args.graph_result_dir}/'
-                f'{explainer_args.dataset_str}/'
-                f'edge_addition_{explainer_args.edge_addition}/'
-                f'{explainer_args.algorithm}/'
-                f'_{i}_counter_factual_{explainer_args.graph_result_name}_removed_edges'
-            )
             print('yes!')
-
         except:
             pass
 
@@ -202,10 +190,10 @@ if __name__ == '__main__':
     parser.add_argument('--beta', type=float, default=0.5, help='beta variable')
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
     parser.add_argument('--edge-addition', type=bool, default=False, help='CF edge_addition')
-    parser.add_argument('--algorithm', type=str, default='loss_PN_AE_L1_L2', help='Result directory')
+    parser.add_argument('--algorithm', type=str, default='loss_PN_L1_L2', help='Result directory')
     parser.add_argument('--graph-result-dir', type=str, default='./results', help='Result directory')
-    parser.add_argument('--graph-result-name', type=str, default='loss_PN_AE_L1_L2', help='Result name')
-    parser.add_argument('--cf_train_loss', type=str, default='loss_PN_AE_L1_L2', help='CF explainer loss function')
+    parser.add_argument('--graph-result-name', type=str, default='loss_PN_L1_L2', help='Result name')
+    parser.add_argument('--cf_train_loss', type=str, default='loss_PN_L1_L2', help='CF explainer loss function')
     parser.add_argument('--n-momentum', type=float, default=0.5, help='Nesterov momentum')
     explainer_args = parser.parse_args()
 
