@@ -140,61 +140,59 @@ def plot_graph(adj, labels, node_idx, name, org_edge_idx=None, plot_grey_edges=T
     plt.savefig(name)
 
 
-# def plot_sub_graph(adj, labels, node_idx, name, org_edge_idx=None):
-#
-#     n_nodes = int(adj[node_idx, :].cpu().numpy().sum())
-#     edge_index = dense_to_sparse(torch.tensor(adj))[0].t().cpu().numpy()
-#     if len(edge_index) == 0:
-#         print(f'{name} No edge exist -> The adjacency matrix is not valid')
-#         return
-#     edge_list = [(i[0], i[1]) for i in edge_index]
-#     a = np.array(edge_list)
-#     a = a[a[:, 0] == node_idx]
-#     pos_edges = [(u, v) for (u, v) in a if (u, v)]
-#     res = (org_edge_idx[:, None] == a).all(-1).any(-1)
-#     max_label = labels.max() + 1
-#     label2nodes = []
-#     labels = labels[a[:,1]]
-#     for i in range(max_label):
-#         label2nodes.append([])
-#     for x in range(n_nodes):
-#         label2nodes[labels[i]].append(i)
-#
-#
-#     plt.close()
-#     G = nx.Graph()
-#     G.add_nodes_from(a[:, 1])
-#     G.add_edges_from(pos_edges)
-#     pos = nx.spring_layout(G)
-#     for cc in nx.connected_components(G):
-#         if node_idx in cc:
-#             G = G.subgraph(cc).copy()
-#             break
-#     # explicitly set positions
-#     for i in range(max_label):
-#         node_filter = []
-#         for j in range(len(label2nodes[i])):
-#             if label2nodes[i][j] in G.nodes():
-#                 node_filter.append(label2nodes[i][j])
-#         nx.draw_networkx_nodes(G, pos,
-#                                nodelist=node_filter,
-#                                node_color=colors[i % len(colors)],
-#                                node_size=20, label=str(i))
-#
-#     nx.draw_networkx_nodes(G, pos,
-#                            nodelist=[node_idx],
-#                            node_color='yellow',
-#                            node_size=50, node_shape='s', label=str(labels[node_idx]))
-#     nx.draw_networkx_edges(G, pos,
-#                            edgelist=pos_edges,
-#                            width=1, alpha=1)
-#
-#     # plotting removed nodes and edges in red
-#
-#     ax = plt.gca()
-#     ax.margins(0.11)
-#     plt.tight_layout()
-#     plt.legend()
-#     plt.title(name)
-#     plt.axis("off")
-#     plt.savefig(name)
+def plot_cf_graph(adj, labels, node_idx, name):
+
+    edge_index = dense_to_sparse(torch.tensor(adj))[0].t().cpu().numpy()
+    nodes = np.unique(edge_index.flatten())
+    if len(edge_index) == 0:
+        print(f'{name} No edge exist -> The adjacency matrix is not valid')
+        return
+    edge_list = [(i[0], i[1]) for i in edge_index]
+    max_label = labels.max() + 1
+    label2nodes = []
+    for i in range(max_label):
+        label2nodes.append([])
+    for x in nodes:
+        label2nodes[labels[x]].append(x)
+
+
+    plt.close()
+    G = nx.Graph()
+    G.add_nodes_from(nodes)
+    G.add_edges_from(edge_list)
+    pos = nx.spring_layout(G)
+
+    a = np.array(edge_list)
+    a = a[a[:, 0] == node_idx]
+    # only plotting the edges and neighboring nodes of the node_idx
+    pos_edges = [(u, v) for (u, v) in a if (u, v)]
+    # explicitly set positions
+    for i in range(max_label):
+        node_filter = []
+        for j in range(len(label2nodes[i])):
+            if label2nodes[i][j] in G.nodes():
+                node_filter.append(label2nodes[i][j])
+        nx.draw_networkx_nodes(G, pos,
+                               nodelist=node_filter,
+                               node_color=colors[i % len(colors)],
+                               node_size=20, label=str(i))
+
+    nx.draw_networkx_nodes(G, pos,
+                           nodelist=[node_idx],
+                           node_color='yellow',
+                           node_size=50, node_shape='s', label=str(labels[node_idx]))
+
+    nx.draw_networkx_edges(G, pos, width=1, alpha=1, edge_color='grey', style=':')
+    nx.draw_networkx_edges(G, pos,
+                           edgelist=pos_edges,
+                           width=1, alpha=1)
+
+    # plotting removed nodes and edges in red
+
+    ax = plt.gca()
+    ax.margins(0.11)
+    plt.tight_layout()
+    plt.legend()
+    plt.title(name)
+    plt.axis("off")
+    plt.savefig(name)

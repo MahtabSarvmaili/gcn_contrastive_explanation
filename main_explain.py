@@ -1,6 +1,7 @@
 import argparse
 import sys
 import os
+import traceback
 import torch
 import numpy as np
 from data.data_loader import load_data, load_synthetic, load_synthetic_AE, load_data_AE
@@ -9,7 +10,7 @@ from utils import normalize_adj, get_neighbourhood
 from model import GCN, train
 from cf_explainer import CFExplainer
 from gae.GAE import gae
-from visualization import plot_graph
+from visualization import plot_graph, plot_cf_graph
 from evaluation import fidelity_size_sparsity, removed_1by1_edges
 torch.manual_seed(0)
 np.random.seed(0)
@@ -18,10 +19,10 @@ sys.path.append('../..')
 
 
 def main(gae_args, explainer_args):
-    data = load_data(explainer_args)
-    data_AE = load_data_AE(explainer_args)
-    # data =load_synthetic(gen_syn1, device=explainer_args.device)
-    # data_AE = load_synthetic_AE(gen_syn1, device=explainer_args.device)
+    # data = load_data(explainer_args)
+    # data_AE = load_data_AE(explainer_args)
+    data =load_synthetic(gen_syn1, device=explainer_args.device)
+    data_AE = load_synthetic_AE(gen_syn1, device=explainer_args.device)
     AE_threshold = {
         'gen_syn1': 0.5,
         'gen_syn2': 0.65,
@@ -146,6 +147,18 @@ def main(gae_args, explainer_args):
                         sub_edge_index.t().cpu().numpy(),
                         plot_grey_edges=True
                     )
+                    vis_cf_adj = 1* (cf_example[-1][2]<sub_adj.cpu().numpy())
+                    plot_cf_graph(
+                        vis_cf_adj,
+                        x[8].numpy(),
+                        new_idx,
+                        f'{explainer_args.graph_result_dir}/'
+                        f'{explainer_args.dataset_str}/'
+                        f'edge_addition_{explainer_args.edge_addition}/'
+                        f'{explainer_args.algorithm}/'
+                        f'_{i}_counter_factual_{j}_'
+                        f'{explainer_args.graph_result_name}__removed_edges__.png',
+                    )
             fidelity_size_sparsity(
                 model,
                 sub_feat,
@@ -160,6 +173,7 @@ def main(gae_args, explainer_args):
             )
             print('yes!')
         except:
+            traceback.print_exc()
             pass
 
 
@@ -185,15 +199,15 @@ if __name__ == '__main__':
     parser.add_argument('--cf-lr', type=float, default=0.009, help='CF-explainer learning rate.')
     parser.add_argument('--dropout', type=float, default=0.2, help='Dropout rate (1 - keep probability).')
     parser.add_argument('--cf-optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset-str', type=str, default='cora', help='type of dataset.')
-    parser.add_argument('--dataset-func', type=str, default='Planetoid', help='type of dataset.')
+    parser.add_argument('--dataset-str', type=str, default='gen_syn1', help='type of dataset.')
+    parser.add_argument('--dataset-func', type=str, default='gen_syn1', help='type of dataset.')
     parser.add_argument('--beta', type=float, default=0.5, help='beta variable')
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
     parser.add_argument('--edge-addition', type=bool, default=False, help='CF edge_addition')
-    parser.add_argument('--algorithm', type=str, default='loss_PN_L1_L2', help='Result directory')
+    parser.add_argument('--algorithm', type=str, default='loss_PN_AE_L1_L2', help='Result directory')
     parser.add_argument('--graph-result-dir', type=str, default='./results', help='Result directory')
-    parser.add_argument('--graph-result-name', type=str, default='loss_PN_L1_L2', help='Result name')
-    parser.add_argument('--cf_train_loss', type=str, default='loss_PN_L1_L2', help='CF explainer loss function')
+    parser.add_argument('--graph-result-name', type=str, default='loss_PN_AE_L1_L2', help='Result name')
+    parser.add_argument('--cf_train_loss', type=str, default='loss_PN_AE_L1_L2', help='CF explainer loss function')
     parser.add_argument('--n-momentum', type=float, default=0.5, help='Nesterov momentum')
     explainer_args = parser.parse_args()
 

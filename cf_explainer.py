@@ -117,7 +117,6 @@ class CFExplainer:
             print(" ")
         cf_stats = []
         if y_pred_new_actual != self.y_pred_orig:
-
             cf_stats = [
                 self.node_idx.item(), self.new_idx.item(),
                 cf_adj.cpu().detach().numpy(), self.sub_adj.cpu().detach().numpy(),
@@ -125,8 +124,8 @@ class CFExplainer:
                 y_pred_new_actual.item(), self.sub_labels[self.new_idx].cpu().detach().numpy(),
                 output_actual.argmax(dim=1).cpu(), self.sub_adj.shape[0],
                 loss_total.item(), loss_perturb.item(),
-                loss_graph_dist.item(), L1.item(),
-                L2.item(), l2_AE.item(),
+                loss_graph_dist.item(), L1,
+                L2, l2_AE,
             ]
         return cf_stats, loss_perturb
 
@@ -144,7 +143,7 @@ class CFExplainer:
         self.D_x = get_degree_matrix(self.A_x)
 
         best_cf_example = []
-        best_loss = np.inf
+        best_loss = 0
         num_cf_examples = 0
         for epoch in range(num_epochs):
             new_example, loss_total = self.train_cf_model_pn(epoch, num_epochs)
