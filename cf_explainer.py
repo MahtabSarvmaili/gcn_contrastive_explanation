@@ -6,6 +6,7 @@ import torch.optim as optim
 from torch.nn.utils import clip_grad_norm_
 from utils import get_degree_matrix
 from gcn_perturb import GCNSyntheticPerturb
+from visualization import plot_errors
 
 torch.manual_seed(0)
 np.random.seed(0)
@@ -41,7 +42,7 @@ class CFExplainer:
         self.kappa = kappa
         self.edge_addition = edge_addition
         self.algorithm = algorithm
-
+        self.losses = {'loss_total':[], 'loss_perturb':[], 'loss_graph_dist':[], 'L1':[], 'L2':[], 'l2_AE':[]}
         # Instantiate CF model class, load weights from original model
         self.cf_model = GCNSyntheticPerturb(
             self.sub_feat.shape[1], n_hid, n_hid,
@@ -101,6 +102,13 @@ class CFExplainer:
             loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss_PN_AE_(
                 self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot
             )
+        self.losses['loss_total'].append(loss_total.item())
+        self.losses['loss_graph_dist'].append(loss_graph_dist.item())
+        self.losses['loss_perturb'].append(loss_perturb.item())
+        self.losses['L1'].append(L1)
+        self.losses['L2'].append(L2)
+        self.losses['l2_AE'].append(l2_AE)
+
         loss_total.backward()
         clip_grad_norm_(self.cf_model.parameters(), 2.0)
         self.cf_optimizer.step()
@@ -143,7 +151,7 @@ class CFExplainer:
         self.D_x = get_degree_matrix(self.A_x)
 
         best_cf_example = []
-        best_loss = 0
+        best_loss = np.inf
         num_cf_examples = 0
         for epoch in range(num_epochs):
             new_example, loss_total = self.train_cf_model_pn(epoch, num_epochs)
@@ -154,10 +162,10 @@ class CFExplainer:
                     num_cf_examples += 1
                     print(f'Epoch {epoch}, Num_cf_examples: {num_cf_examples}')
             else:
-                if new_example != [] and loss_total >= best_loss:
+                if new_example != [] and loss_total <= best_loss:
                     best_cf_example.append(new_example)
                     num_cf_examples += 1
                     best_loss = loss_total
                     print(f'Epoch {epoch}, Num_cf_examples: {num_cf_examples}')
-
+        plot_errors(self.losses)
         return best_cf_example

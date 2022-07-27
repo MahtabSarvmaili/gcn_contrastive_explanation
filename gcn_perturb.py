@@ -22,10 +22,16 @@ def pertinent_negative_loss(output, y_orig_onehot, const, kappa):
     return loss_perturb
 
 
+def pertinent_positive_loss(output, y_orig_onehot, const, kappa):
+    target_lab_score = (output * y_orig_onehot).sum(dim=0)
+    max_nontarget_lab_score = (
+            (1 - y_orig_onehot) * output -
+            (y_orig_onehot * 10000)).max(dim=0).values
+    loss_perturb = torch.max(const, max_nontarget_lab_score - target_lab_score + kappa)
+    return loss_perturb
+
+
 class GraphConvolutionPerturb(nn.Module):
-    """
-    Similar to GraphConvolution except includes P_hat
-    """
 
     def __init__(self, in_features, out_features, bias=True):
         super(GraphConvolutionPerturb, self).__init__()
