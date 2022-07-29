@@ -94,13 +94,6 @@ class plot_graph:
         a = a[a[:, 0] == node_idx]
         # only plotting the edges and neighboring nodes of the node_idx
         pos_edges = [(u, v) for (u, v) in a if (u, v)]
-        res = (org_edge_idx[:, None] == edge_index).all(-1).any(-1)
-        # removed_edges = org_edge_idx[res == False]
-        # removed_edges = removed_edges[removed_edges[:, 0] == node_idx]
-        # removed_edges_list = [(i[0], i[1]) for i in removed_edges]
-
-        # plotting the whole adjacency matrix
-        # pos_edges = edge_list
         max_label = labels.max() + 1
         nmb_nodes = adj.shape[0]
         label2nodes = []
@@ -199,9 +192,10 @@ class plot_graph:
         plt.savefig(name)
         plt.close()
 
-def plot_errors(losses):
+
+def plot_errors(losses, path):
     x = list(range(len(losses['loss_total'])))
-    fig, axs = plt.subplots(3, figsize=(8,6))
+    fig, axs = plt.subplots(3, figsize=(14, 12))
     fig.suptitle('Vertically stacked subplots')
     axs[0].plot(x, losses['loss_total'])
     axs[0].plot(x, losses['loss_graph_dist'])
@@ -211,4 +205,4 @@ def plot_errors(losses):
     axs[2].plot(x, losses['L2'])
     axs[2].plot(x, losses['l2_AE'])
     axs[2].legend(['L1', 'L2', 'l2_AE'])
-    plt.savefig("loss.png")
+    plt.savefig(path)

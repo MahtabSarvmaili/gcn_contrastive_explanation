@@ -78,7 +78,7 @@ class CFExplainer:
         y_pred_new_actual = torch.argmax(output_actual[self.new_idx])
         return output, output_actual, y_pred_new, y_pred_new_actual
 
-    def train_cf_model_pn(self, epoch, num_epochs):
+    def train_cf_model_pn(self, epoch):
         l2_AE = None
         self.cf_optimizer.zero_grad()
         output, output_actual, y_pred_new, y_pred_new_actual = self.predict_cf_model()
@@ -90,18 +90,19 @@ class CFExplainer:
             loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss_PN_L1_L2(
                 output[self.new_idx], self.y_orig_onehot
             )
+        elif self.algorithm == 'loss_PN_AE_L1_L2_dist':
+            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss_PN_AE_L1_L2_dist(
+                self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot
+            )
         elif self.algorithm == 'loss_PN_AE_L1_L2':
             loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss_PN_AE_L1_L2(
                 self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot
             )
-        elif self.algorithm == 'loss_PN_AE_pure':
-            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss_PN_AE_pure(
-                self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot
-            )
-        else:
+        elif self.algorithm == 'loss_PN_AE_':
             loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss_PN_AE_(
                 self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot
             )
+
         self.losses['loss_total'].append(loss_total.item())
         self.losses['loss_graph_dist'].append(loss_graph_dist.item())
         self.losses['loss_perturb'].append(loss_perturb.item())
@@ -127,7 +128,7 @@ class CFExplainer:
         if y_pred_new_actual != self.y_pred_orig:
             cf_stats = [
                 self.node_idx.item(), self.new_idx.item(),
-                cf_adj.cpu().detach().numpy(), self.sub_adj.cpu().detach().numpy(),
+                cf_adj.cpu().detach().numpy(), epoch,
                 self.y_pred_orig.item(), y_pred_new.item(),
                 y_pred_new_actual.item(), self.sub_labels[self.new_idx].cpu().detach().numpy(),
                 output_actual.argmax(dim=1).cpu(), self.sub_adj.shape[0],
@@ -142,6 +143,7 @@ class CFExplainer:
             node_idx,
             new_idx,
             num_epochs,
+            path=''
     ):
         self.node_idx = node_idx
         self.new_idx = new_idx
@@ -154,7 +156,7 @@ class CFExplainer:
         best_loss = np.inf
         num_cf_examples = 0
         for epoch in range(num_epochs):
-            new_example, loss_total = self.train_cf_model_pn(epoch, num_epochs)
+            new_example, loss_total = self.train_cf_model_pn(epoch)
             if self.edge_addition:
                 if new_example != [] and loss_total <= best_loss:
                     best_cf_example.append(new_example)
@@ -167,5 +169,5 @@ class CFExplainer:
                     num_cf_examples += 1
                     best_loss = loss_total
                     print(f'Epoch {epoch}, Num_cf_examples: {num_cf_examples}')
-        plot_errors(self.losses)
+        plot_errors(self.losses, path)
         return best_cf_example

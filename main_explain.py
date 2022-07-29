@@ -80,15 +80,19 @@ def main(gae_args, explainer_args):
     for i in idx_test[:10]:
         try:
             sub_adj, sub_feat, sub_labels, node_dict, sub_edge_index = get_neighbourhood(
-                int(i), data['edge_index'], explainer_args.n_layers + 1, data['features'], data['labels'])
+                int(i), data['edge_index'], explainer_args.n_layers + 1, data['features'], output.argmax(dim=1))
             new_idx = node_dict[int(i)]
+            sub_output = model(sub_feat, sub_adj).argmax(dim=1)
             # Check that original model gives same prediction on full graph and subgraph
             with torch.no_grad():
-                print("Output original model, full adj: {}".format(output[i].argmax()))
+                print(f"Output original model, normalized - actual label: {data['labels'][i]}")
+                print(f"Output original model, full adj: {output[i].argmax()}")
                 print(
-                    "Output original model, sub adj: {}".format(
-                        model(sub_feat, normalize_adj(sub_adj, explainer_args.device))[new_idx].argmax()
-                    )
+                    f"Output original model, normalized - sub adj: "
+                    f"{model(sub_feat, normalize_adj(sub_adj, explainer_args.device))[new_idx].argmax()}"
+                )
+                print(
+                    f"Output original model, not normalized - sub adj: {sub_output[new_idx]}"
                 )
             # Need to instantitate new cf model every time because size of P changes based on size of sub_adj
             explainer = CFExplainer(
@@ -114,7 +118,12 @@ def main(gae_args, explainer_args):
             cf_example = explainer.explain(
                 node_idx=i,
                 new_idx=new_idx,
-                num_epochs=explainer_args.cf_epochs
+                num_epochs=explainer_args.cf_epochs,
+                path=f'{explainer_args.graph_result_dir}/'
+                f'{explainer_args.dataset_str}/'
+                f'edge_addition_{explainer_args.edge_addition}/'
+                f'{explainer_args.algorithm}/'
+                f'_{i}_loss_.png'
             )
             test_cf_examples.append(cf_example)
             plotting_graph = plot_graph(
@@ -151,10 +160,39 @@ def main(gae_args, explainer_args):
                         f'edge_addition_{explainer_args.edge_addition}/'
                         f'{explainer_args.algorithm}/'
                         f'_{i}_counter_factual_{j}_'
+                        f'_epoch_{x[3]}_'
                         f'{explainer_args.graph_result_name}__removed_edges__.png',
                     )
-                    insertion(model, sub_feat, cf_sub_adj, del_edge_adj, x[8].numpy(), new_idx)
-                    deletion(model, sub_feat, sub_adj.cpu().numpy(), del_edge_adj, sub_labels.cpu().numpy(), new_idx)
+                    insertion(
+                        model,
+                        sub_feat,
+                        cf_sub_adj,
+                        del_edge_adj,
+                        x[8].numpy(),
+                        new_idx,
+                        name= f'{explainer_args.graph_result_dir}/'
+                        f'{explainer_args.dataset_str}/'
+                        f'edge_addition_{explainer_args.edge_addition}/'
+                        f'{explainer_args.algorithm}/'
+                        f'_{i}_counter_factual_{j}_'
+                        f'_epoch_{x[3]}_'
+                        f'{explainer_args.graph_result_name}__insertion__',
+                    )
+                    deletion(
+                        model,
+                        sub_feat,
+                        sub_adj.cpu().numpy(),
+                        del_edge_adj,
+                        sub_output.cpu().numpy(),
+                        new_idx,
+                        name=f'{explainer_args.graph_result_dir}/'
+                             f'{explainer_args.dataset_str}/'
+                             f'edge_addition_{explainer_args.edge_addition}/'
+                             f'{explainer_args.algorithm}/'
+                             f'_{i}_counter_factual_{j}_'
+                             f'_epoch_{x[3]}_'
+                             f'{explainer_args.graph_result_name}__deletion__',
+                    )
             fidelity_size_sparsity(
                 model,
                 sub_feat,
@@ -196,15 +234,15 @@ if __name__ == '__main__':
     parser.add_argument('--cf-lr', type=float, default=0.009, help='CF-explainer learning rate.')
     parser.add_argument('--dropout', type=float, default=0.2, help='Dropout rate (1 - keep probability).')
     parser.add_argument('--cf-optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset-str', type=str, default='cora', help='type of dataset.')
+    parser.add_argument('--dataset-str', type=str, default='citeseer', help='type of dataset.')
     parser.add_argument('--dataset-func', type=str, default='Planetoid', help='type of dataset.')
     parser.add_argument('--beta', type=float, default=0.5, help='beta variable')
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
     parser.add_argument('--edge-addition', type=bool, default=False, help='CF edge_addition')
-    parser.add_argument('--algorithm', type=str, default='loss_PN_L1_L2', help='Result directory')
+    parser.add_argument('--algorithm', type=str, default='loss_PN_AE_', help='Result directory')
     parser.add_argument('--graph-result-dir', type=str, default='./results', help='Result directory')
-    parser.add_argument('--graph-result-name', type=str, default='loss_PN_L1_L2', help='Result name')
-    parser.add_argument('--cf_train_loss', type=str, default='loss_PN_L1_L2', help='CF explainer loss function')
+    parser.add_argument('--graph-result-name', type=str, default='loss_PN_AE_', help='Result name')
+    parser.add_argument('--cf_train_loss', type=str, default='loss_PN_AE_', help='CF explainer loss function')
     parser.add_argument('--n-momentum', type=float, default=0.5, help='Nesterov momentum')
     explainer_args = parser.parse_args()
 

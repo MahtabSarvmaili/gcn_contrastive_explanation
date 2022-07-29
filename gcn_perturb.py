@@ -235,11 +235,7 @@ class GCNSyntheticPerturb(nn.Module):
         # Need dim >=2 for F.nll_loss to work
         output = output.unsqueeze(0)
         y_pred_orig = y_pred_orig.unsqueeze(0)
-
-        if self.edge_addition:
-            cf_adj = self.P
-        else:
-            cf_adj = self.P * self.adj
+        cf_adj = self.P * self.adj
         cf_adj.requires_grad = True  # Need to change this otherwise loss_graph_dist has no gradient
 
         # Want negative in front to maximize loss instead of minimizing it to find CFs
@@ -253,10 +249,7 @@ class GCNSyntheticPerturb(nn.Module):
     def loss_PN_L1_L2(self, output, y_orig_onehot):
 
         loss_perturb = pertinent_negative_loss(output, y_orig_onehot, self.const, self.kappa)
-        if self.edge_addition:
-            cf_adj = self.P
-        else:
-            cf_adj = self.P * self.adj
+        cf_adj = self.P * self.adj
         cf_adj.requires_grad = True  # Need to change this otherwise loss_graph_dist has no gradient
         loss_graph_dist = torch.dist(cf_adj , self.adj.cuda(), p=1) / 2
         L1 = torch.linalg.norm(self.P_hat_symm, ord=1)
@@ -267,10 +260,20 @@ class GCNSyntheticPerturb(nn.Module):
     def loss_PN_AE_L1_L2(self, graph_AE, x, output, y_orig_onehot):
 
         loss_perturb = pertinent_negative_loss(output, y_orig_onehot, self.const, self.kappa)
-        if self.edge_addition:
-            cf_adj = self.P
-        else:
-            cf_adj = self.P * self.adj
+        cf_adj = self.P * self.adj
+        cf_adj.requires_grad = True  # Need to change this otherwise loss_graph_dist has no gradient
+        cf_adj_sparse = dense_to_sparse(cf_adj)[0]
+        reconst_P = (torch.sigmoid(graph_AE.forward(x, cf_adj_sparse)) >= self.AE_threshold).float()
+        l2_AE = torch.dist(cf_adj, reconst_P, p=2)
+        loss_graph_dist = torch.dist(cf_adj, self.adj.cuda(), p=1) / 2
+        L1 = torch.linalg.norm(self.P_hat_symm, ord=1)
+        L2 = torch.linalg.norm(self.P_hat_symm, ord=2)
+        loss_total = loss_perturb + self.psi*L1 + L2 + self.gamma*l2_AE
+        return loss_total, loss_perturb, loss_graph_dist, L1.item(), L2.item(), l2_AE.item(), cf_adj
+
+    def loss_PN_AE_L1_L2_dist(self, graph_AE, x, output, y_orig_onehot):
+        loss_perturb = pertinent_negative_loss(output, y_orig_onehot, self.const, self.kappa)
+        cf_adj = self.P * self.adj
         cf_adj.requires_grad = True  # Need to change this otherwise loss_graph_dist has no gradient
         cf_adj_sparse = dense_to_sparse(cf_adj)[0]
         reconst_P = (torch.sigmoid(graph_AE.forward(x, cf_adj_sparse)) >= self.AE_threshold).float()
@@ -282,26 +285,8 @@ class GCNSyntheticPerturb(nn.Module):
         return loss_total, loss_perturb, loss_graph_dist, L1.item(), L2.item(), l2_AE.item(), cf_adj
 
     def loss_PN_AE_(self, graph_AE, x, output, y_orig_onehot):
-
         loss_perturb = pertinent_negative_loss(output, y_orig_onehot, self.const, self.kappa)
-        if self.edge_addition:
-            cf_adj = self.P
-        else:
-            cf_adj = self.P * self.adj
-        cf_adj.requires_grad = True  # Need to change this otherwise loss_graph_dist has no gradient
-        cf_adj_sparse = dense_to_sparse(cf_adj)[0]
-        reconst_P = (torch.sigmoid(graph_AE.forward(x, cf_adj_sparse)) >= self.AE_threshold).float()
-        l2_AE = torch.dist(cf_adj, reconst_P, p=2)
-        loss_graph_dist = torch.dist(cf_adj, self.adj.cuda(), p=1) / 2
-        loss_total = loss_perturb + self.beta * loss_graph_dist
-        return loss_total, loss_perturb, loss_graph_dist, torch.inf, torch.inf, l2_AE.item(), cf_adj
-
-    def loss_PN_AE_pure(self, graph_AE, x, output, y_orig_onehot):
-        loss_perturb = pertinent_negative_loss(output, y_orig_onehot, self.const, self.kappa)
-        if self.edge_addition:
-            cf_adj = self.P
-        else:
-            cf_adj = self.P * self.adj
+        cf_adj = self.P * self.adj
         cf_adj.requires_grad = True  # Need to change this otherwise loss_graph_dist has no gradient
         cf_adj_sparse = dense_to_sparse(cf_adj)[0]
         reconst_P = (torch.sigmoid(graph_AE.forward(x, cf_adj_sparse)) >= self.AE_threshold).float()
