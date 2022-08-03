@@ -59,7 +59,6 @@ def main(gae_args, explainer_args):
         dataset_name=explainer_args.dataset_str
     )
     model.eval()
-    data['cluster_features'] = model.encode(data['features'], data['adj_norm']).detach()
     output = model(data['features'], data['adj_norm'])
     y_pred_orig = torch.argmax(output, dim=1)
     print("test set y_true counts: {}".format(
@@ -204,8 +203,6 @@ def main(gae_args, explainer_args):
                 f'{explainer_args.algorithm}/'
                 f'_{i}_counter_factual_{explainer_args.graph_result_name}_sub_graph_'
             )
-
-
             print('yes!')
         except:
             traceback.print_exc()

@@ -117,7 +117,7 @@ def normalize_adj(adj, device):
     return norm_adj
 
 
-def get_neighbourhood(node_idx, edge_index, n_hops, features, labels):
+def get_neighbourhood(node_idx, edge_index, n_hops, features, labels, hard_edge_mask=False):
 
     edge_subset = k_hop_subgraph(node_idx, n_hops, edge_index)  # Get all nodes involved
     edge_subset_relabel = subgraph(edge_subset[0], edge_index, relabel_nodes=True)  # Get relabelled subset of edges
@@ -128,7 +128,10 @@ def get_neighbourhood(node_idx, edge_index, n_hops, features, labels):
     new_index = np.array([i for i in range(len(edge_subset[0]))])
     node_dict = dict(zip(edge_subset[0].cpu().numpy(), new_index))  # Maps orig labels to new
 
-    return sub_adj, sub_feat, sub_labels, node_dict, edge_subset_relabel[0]
+    if hard_edge_mask:
+        return sub_adj, sub_feat, sub_labels, node_dict, edge_subset_relabel[0], edge_subset[3]
+    else:
+        return sub_adj, sub_feat, sub_labels, node_dict, edge_subset_relabel[0]
 
 
 def create_symm_matrix_from_vec(vector, n_rows):
