@@ -21,8 +21,8 @@ sys.path.append('../..')
 def main(gae_args, explainer_args):
     data = load_data(explainer_args)
     data_AE = load_data_AE(explainer_args)
-    # data =load_synthetic(gen_syn1, device=explainer_args.device)
-    # data_AE = load_synthetic_AE(gen_syn1, device=explainer_args.device)
+    # data =load_synthetic(gen_syn2, device=explainer_args.device)
+    # data_AE = load_synthetic_AE(gen_syn2, device=explainer_args.device)
     AE_threshold = {
         'gen_syn1': 0.5,
         'gen_syn2': 0.65,
@@ -231,15 +231,15 @@ if __name__ == '__main__':
     parser.add_argument('--cf-lr', type=float, default=0.009, help='CF-explainer learning rate.')
     parser.add_argument('--dropout', type=float, default=0.2, help='Dropout rate (1 - keep probability).')
     parser.add_argument('--cf-optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset-str', type=str, default='citeseer', help='type of dataset.')
+    parser.add_argument('--dataset-str', type=str, default='cora', help='type of dataset.')
     parser.add_argument('--dataset-func', type=str, default='Planetoid', help='type of dataset.')
     parser.add_argument('--beta', type=float, default=0.5, help='beta variable')
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
     parser.add_argument('--edge-addition', type=bool, default=False, help='CF edge_addition')
-    parser.add_argument('--algorithm', type=str, default='loss_PN_AE_', help='Result directory')
+    parser.add_argument('--algorithm', type=str, default='loss_PN_dist', help='Result directory')
     parser.add_argument('--graph-result-dir', type=str, default='./results', help='Result directory')
-    parser.add_argument('--graph-result-name', type=str, default='loss_PN_AE_', help='Result name')
-    parser.add_argument('--cf_train_loss', type=str, default='loss_PN_AE_', help='CF explainer loss function')
+    parser.add_argument('--graph-result-name', type=str, default='loss_PN_dist', help='Result name')
+    parser.add_argument('--cf_train_loss', type=str, default='loss_PN_dist', help='CF explainer loss function')
     parser.add_argument('--n-momentum', type=float, default=0.5, help='Nesterov momentum')
     explainer_args = parser.parse_args()
 

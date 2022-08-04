@@ -257,6 +257,28 @@ class GCNSyntheticPerturb(nn.Module):
         loss_total = loss_perturb + self.beta * loss_graph_dist + self.psi*L1 + L2
         return loss_total, loss_perturb, loss_graph_dist, L1.item(), L2.item(), torch.inf, cf_adj
 
+    def loss_PN(self, output, y_orig_onehot):
+
+        loss_perturb = pertinent_negative_loss(output, y_orig_onehot, self.const, self.kappa)
+        cf_adj = self.P * self.adj
+        cf_adj.requires_grad = True  # Need to change this otherwise loss_graph_dist has no gradient
+        loss_graph_dist = torch.dist(cf_adj , self.adj.cuda(), p=1) / 2
+        L1 = torch.linalg.norm(self.P_hat_symm, ord=1)
+        L2 = torch.linalg.norm(self.P_hat_symm, ord=2)
+        loss_total = loss_perturb
+        return loss_total, loss_perturb, loss_graph_dist, L1.item(), L2.item(), torch.inf, cf_adj
+
+    def loss_PN_dist(self, output, y_orig_onehot):
+
+        loss_perturb = pertinent_negative_loss(output, y_orig_onehot, self.const, self.kappa)
+        cf_adj = self.P * self.adj
+        cf_adj.requires_grad = True  # Need to change this otherwise loss_graph_dist has no gradient
+        loss_graph_dist = torch.dist(cf_adj , self.adj.cuda(), p=1) / 2
+        L1 = torch.linalg.norm(self.P_hat_symm, ord=1)
+        L2 = torch.linalg.norm(self.P_hat_symm, ord=2)
+        loss_total = loss_perturb + self.beta * loss_graph_dist
+        return loss_total, loss_perturb, loss_graph_dist, L1.item(), L2.item(), torch.inf, cf_adj
+
     def loss_PN_AE_L1_L2(self, graph_AE, x, output, y_orig_onehot):
 
         loss_perturb = pertinent_negative_loss(output, y_orig_onehot, self.const, self.kappa)

@@ -59,10 +59,10 @@ def main(explainer_args):
             )
             new_idx = node_dict[int(i)]
             sub_output = model(sub_feat, sub_adj).argmax(dim=1)
-            _, edge_mask, labels = explainer.explain_node(
+            node_mask, edge_mask, labels = explainer.explain_node(
                 i, data, sub_adj, sub_feat, sub_labels, node_dict, sub_edge_index
             )
-            if edge_mask.sum() > 0:
+            if edge_mask.sum() > 0 or node_mask.sum()>0:
                 plotting_graph = plot_graph(
                     sub_adj.cpu().numpy(),
                     new_idx,
@@ -145,7 +145,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--device', type=str, default='cuda', help='torch device.')
     parser.add_argument('--bb-epochs', type=int, default=500, help='Number of epochs to train the ')
-    parser.add_argument('--cf-epochs', type=int, default=50, help='Number of epochs to train the ')
+    parser.add_argument('--cf-epochs', type=int, default=100, help='Number of epochs to train the ')
     parser.add_argument('--inputdim', type=int, default=10, help='Input dimension')
     parser.add_argument('--hidden', type=int, default=20, help='Number of units in hidden layer 1.')
     parser.add_argument('--n-layers', type=int, default=3, help='Number of units in hidden layer 1.')
