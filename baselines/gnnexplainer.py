@@ -1,4 +1,4 @@
-from copy import copy
+import copy
 from math import sqrt
 from typing import Optional
 
@@ -58,18 +58,22 @@ class GNNExplainer(torch.nn.Module):
         self.__num_hops__ = num_hops
         self.log = log
 
+    def __set_edgemask__(self, sub_adj):
+        masked_adj = (self.edge_mask>=0.5)*sub_adj
+        return masked_adj
+
     def __set_masks__(self, x, adj):
-        (N, F), E = x.size(), adj.size(1)
+        (N, F), E = x.size(), adj.size(0)
 
         self.node_feat_mask = torch.nn.Parameter(torch.randn(F) * 0.1)
 
         std = torch.nn.init.calculate_gain('relu') * sqrt(2.0 / (2 * N))
-        self.edge_mask = torch.nn.Parameter(torch.randn((E,E)) * std)
+        self.edge_mask = torch.nn.Parameter(torch.randn((E, E)) * std)
 
-        for module in self.model.modules():
-            if isinstance(module, MessagePassing):
-                module.__explain__ = True
-                module.__edge_mask__ = self.edge_mask
+        # for module in self.model.modules():
+        #     if isinstance(module, MessagePassing):
+        #         module.__explain__ = True
+        #         module.__edge_mask__ = self.edge_mask
 
     def __clear_masks__(self):
         for module in self.model.modules():
@@ -166,7 +170,8 @@ class GNNExplainer(torch.nn.Module):
         for epoch in range(1, self.epochs + 1):
             optimizer.zero_grad()
             h = sub_feat * self.node_feat_mask.view(1,-1).sigmoid()
-            log_logits = self.model(h, sub_adj)
+            a = self.__set_edgemask__(sub_adj)
+            log_logits = self.model(h, a)
             loss = self.__loss__(new_idx, log_logits, pred_label)
             loss_.append(loss.item())
             loss.backward()
