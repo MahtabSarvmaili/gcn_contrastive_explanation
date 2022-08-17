@@ -47,6 +47,7 @@ class GNNExplainer(torch.nn.Module):
         'node_feat_reduction': 'mean',
         'edge_ent': 1.0,
         'node_feat_ent': 0.1,
+        'diff_loss': 0.01
     }
 
     def __init__(self, model, epochs: int = 100, lr: float = 0.01,
@@ -59,7 +60,7 @@ class GNNExplainer(torch.nn.Module):
         self.log = log
 
     def __set_edgemask__(self, sub_adj):
-        masked_adj = (self.edge_mask>=0.5)*sub_adj
+        masked_adj = (self.edge_mask.sigmoid()>=0.5)*sub_adj
         return masked_adj
 
     def __set_masks__(self, x, adj):
@@ -69,11 +70,6 @@ class GNNExplainer(torch.nn.Module):
 
         std = torch.nn.init.calculate_gain('relu') * sqrt(2.0 / (2 * N))
         self.edge_mask = torch.nn.Parameter(torch.randn((E, E)) * std)
-
-        # for module in self.model.modules():
-        #     if isinstance(module, MessagePassing):
-        #         module.__explain__ = True
-        #         module.__edge_mask__ = self.edge_mask
 
     def __clear_masks__(self):
         for module in self.model.modules():
@@ -117,7 +113,7 @@ class GNNExplainer(torch.nn.Module):
 
         return x, edge_index, mapping, edge_mask, kwargs
 
-    def __loss__(self, node_idx, log_logits, pred_label):
+    def __loss__(self, node_idx, log_logits, pred_label, masked_adj, sub_adj):
         loss = -log_logits[node_idx, pred_label[node_idx]]
 
         m = self.edge_mask.sigmoid()
@@ -130,7 +126,8 @@ class GNNExplainer(torch.nn.Module):
         node_feat_reduce = getattr(torch, self.coeffs['node_feat_reduction'])
         loss = loss + self.coeffs['node_feat_size'] * node_feat_reduce(m)
         ent = -m * torch.log(m + EPS) - (1 - m) * torch.log(1 - m + EPS)
-        loss = loss + self.coeffs['node_feat_ent'] * ent.mean()
+        loss_graph_dist = sum(sum(abs(masked_adj - sub_adj))) / 2
+        loss = loss + self.coeffs['node_feat_ent'] * ent.mean() + self.coeffs['diff_loss'] * loss_graph_dist
 
         return loss
 
@@ -171,8 +168,9 @@ class GNNExplainer(torch.nn.Module):
             optimizer.zero_grad()
             h = sub_feat * self.node_feat_mask.view(1,-1).sigmoid()
             a = self.__set_edgemask__(sub_adj)
+            print(a.sum())
             log_logits = self.model(h, a)
-            loss = self.__loss__(new_idx, log_logits, pred_label)
+            loss = self.__loss__(new_idx, log_logits, pred_label, a, sub_adj)
             loss_.append(loss.item())
             loss.backward()
             optimizer.step()
@@ -188,7 +186,6 @@ class GNNExplainer(torch.nn.Module):
 
         self.__clear_masks__()
         return node_feat_mask, edge_mask, log_logits.argmax(dim=1)
-
 
     def visualize_subgraph(self, node_idx, edge_index, edge_mask, y=None,
                            threshold=None, **kwargs):
@@ -256,7 +253,6 @@ class GNNExplainer(torch.nn.Module):
         nx.draw_networkx_labels(G, pos, **label_kwargs)
 
         return ax, G
-
 
     def __repr__(self):
         return f'{self.__class__.__name__}()'
