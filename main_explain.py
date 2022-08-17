@@ -11,7 +11,7 @@ from model import GCN, train
 from cf_explainer import CFExplainer
 from gae.GAE import gae
 from visualization import plot_graph
-from evaluation import fidelity_size_sparsity, insertion, deletion
+from evaluation.evaluation import fidelity_size_sparsity, insertion, deletion
 torch.manual_seed(0)
 np.random.seed(0)
 

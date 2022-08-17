@@ -1,18 +1,14 @@
 import argparse
 import sys
-import os
 import traceback
 import torch
 import numpy as np
-from data.data_loader import load_data, load_synthetic, load_synthetic_AE, load_data_AE
-from data.gengraph import gen_syn1, gen_syn2, gen_syn3, gen_syn4
-from utils import normalize_adj, get_neighbourhood
+from data.data_loader import load_data
+from utils import get_neighbourhood
 from model import GCN, train
 from gnnexplainer import GNNExplainer
-from cf_explainer import CFExplainer
-from gae.GAE import gae
 from visualization import plot_graph
-from evaluation import fidelity_size_sparsity, insertion, deletion
+from evaluation.evaluation import insertion, deletion
 torch.manual_seed(0)
 np.random.seed(0)
 
