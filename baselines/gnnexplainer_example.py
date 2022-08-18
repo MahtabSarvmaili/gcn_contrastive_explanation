@@ -7,6 +7,7 @@ import os
 import pandas as pd
 from tqdm import trange
 from torch_geometric.utils import to_dense_adj
+from utils import normalize_adj, get_neighbourhood
 import numpy as np
 
 
@@ -16,7 +17,7 @@ def deletion(model, x, edge_index, edge_mask, labels, node_idx, device='cuda', n
     a = edge_index[:, (edge_mask >= 0.5)]
     for s in size:
         b = np.random.choice(a.size(1), size=int(s * a.size(1)), replace=False)
-        labels_ = model(x, a[:, b], data).argmax(dim=1)
+        labels_ = model(x, a[:, b]).argmax(dim=1)
         changed = labels_ != labels
         percent = (1*changed).sum()/len(labels)
         node_label_change = changed[node_idx]
@@ -26,21 +27,6 @@ def deletion(model, x, edge_index, edge_mask, labels, node_idx, device='cuda', n
     df = pd.DataFrame(p_c,
                       columns=['Percent', 'changed'])
     df.to_csv(f'{name}.csv', index=False)
-
-
-#Load the dataset
-dataset = 'cora'
-path = os.path.join(os.getcwd(), 'data', 'Planetoid')
-train_dataset = Planetoid(path, dataset, transform=T.NormalizeFeatures())
-
-# Since the dataset is comprised of a single huge graph, we extract that graph by indexing 0.
-data = train_dataset[0]
-
-data.train_mask = torch.zeros(data.num_nodes, dtype=torch.bool)
-data.train_mask[:data.num_nodes - 1000] = 1
-data.val_mask = None
-data.test_mask = torch.zeros(data.num_nodes, dtype=torch.bool)
-data.test_mask[data.num_nodes - 500:] = 1
 
 
 class Net(torch.nn.Module):
@@ -62,13 +48,6 @@ class Net(torch.nn.Module):
         return F.log_softmax(x, dim=1)
 
 
-epochs = 200
-dim = 16
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-model = Net(num_features=train_dataset.num_features, dim=dim, num_classes=train_dataset.num_classes).to(device)
-optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-3)
-
-
 def test(model, data):
     model.eval()
     logits, accs = model(data.x, data.edge_index, data), []
@@ -79,49 +58,69 @@ def test(model, data):
     return accs
 
 
-loss = 999.0
-train_acc = 0.0
-test_acc = 0.0
+def train_model(model, epochs, data):
+    loss = 999.0
+    train_acc = 0.0
+    test_acc = 0.0
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-3)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    t = trange(epochs, desc="Stats: ", position=0)
+    model = model.to(device)
+    for epoch in t:
+        model.train()
 
-t = trange(epochs, desc="Stats: ", position=0)
+        loss = 0
 
-for epoch in t:
-    model.train()
+        data = data.to(device)
+        optimizer.zero_grad()
+        log_logits = model(data.x, data.edge_index, data)
 
-    loss = 0
+        # Since the data is a single huge graph, training on the training set is done by masking the nodes that are not in the training set.
+        loss = F.nll_loss(log_logits[data.train_mask], data.y[data.train_mask])
+        loss.backward()
+        optimizer.step()
 
-    data = data.to(device)
-    optimizer.zero_grad()
-    log_logits = model(data.x, data.edge_index, data)
+        # validate
+        train_acc, test_acc = test(model, data)
+        train_loss = loss
 
-    # Since the data is a single huge graph, training on the training set is done by masking the nodes that are not in the training set.
-    loss = F.nll_loss(log_logits[data.train_mask], data.y[data.train_mask])
-    loss.backward()
-    optimizer.step()
+        t.set_description(
+            '[Train_loss:{:.6f} Train_acc: {:.4f}, Test_acc: {:.4f}]'.format(loss, train_acc, test_acc))
+    return model
 
-    # validate
-    train_acc, test_acc = test(model, data)
-    train_loss = loss
 
-    t.set_description('[Train_loss:{:.6f} Train_acc: {:.4f}, Test_acc: {:.4f}]'.format(loss, train_acc, test_acc))
+class gnn_example:
 
-idx_test = np.arange(0, data.num_nodes)[data.test_mask.cpu()]
-x, edge_index = data.x, data.edge_index
-adj = to_dense_adj(edge_index).squeeze(0)
-explainer = GNNExplainer(model, epochs=200)
-for node_idx in idx_test:
-    node_idx = int(node_idx)
-    node_feat_mask, edge_mask = explainer.explain_node(node_idx, x, edge_index)
-    edge_mask_ = to_dense_adj(edge_index[:,(edge_mask>=0.5)], max_num_nodes=x.size(0)).squeeze(0)
-    # cf_adj = edge_mask_ * adj
-    labels = model(x, edge_index[:,(edge_mask>=0.5)], data).argmax(dim=1)
+    def __init__(self):
+        #Load the dataset
+        dataset = 'cora'
+        path = os.path.join(os.getcwd(), 'data', 'Planetoid')
+        train_dataset = Planetoid(path, dataset, transform=T.NormalizeFeatures())
 
-    deletion(
-        model,
-        x,
-        edge_index,
-        edge_mask,
-        labels,
-        node_idx,
-        name=f'cora__insertion__',
-    )
+        # Since the dataset is comprised of a single huge graph, we extract that graph by indexing 0.
+        self.data = train_dataset[0]
+
+        self.data.train_mask = torch.zeros(self.data.num_nodes, dtype=torch.bool)
+        self.data.train_mask[:self.data.num_nodes - 1000] = 1
+        self.data.val_mask = None
+        self.data.test_mask = torch.zeros(self.data.num_nodes, dtype=torch.bool)
+        self.data.test_mask[self.data.num_nodes - 500:] = 1
+        epochs = 200
+
+        model = Net(num_features=train_dataset.num_features, num_classes=train_dataset.num_classes)
+        self.model = train_model(model, epochs, self.data)
+
+    def explain_node(self, node_idx):
+        output = self.model(self.data.x, self.data.edge_index)
+        explainer = GNNExplainer(self.model, epochs=200)
+        sub_adj, sub_feat, sub_labels, node_dict, sub_edge_index = get_neighbourhood(
+            node_idx, self.data.edge_index, 3 + 1, self.data.x, output.argmax(dim=1))
+        new_idx = int(node_dict[node_idx])
+
+        node_feat_mask, edge_mask = explainer.explain_node(new_idx, sub_feat, sub_edge_index)
+        labels = self.model(sub_feat, sub_edge_index[:,(edge_mask>=0.5)], self.data).argmax(dim=1)
+        return node_feat_mask, edge_mask, labels
+
+
+gnnexplain = gnn_example()
+gnnexplain.explain_node(4)
