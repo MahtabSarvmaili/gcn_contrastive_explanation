@@ -10,6 +10,9 @@ from torch_geometric.utils import to_dense_adj
 from utils import normalize_adj, get_neighbourhood
 import numpy as np
 
+torch.manual_seed(0)
+np.random.seed(0)
+
 
 def deletion(model, x, edge_index, edge_mask, labels, node_idx, device='cuda', name='name'):
     p_c = []
@@ -89,7 +92,7 @@ def train_model(model, epochs, data):
     return model
 
 
-class gnn_example:
+class gnn_explainer:
 
     def __init__(self):
         #Load the dataset
@@ -106,21 +109,21 @@ class gnn_example:
         self.data.test_mask = torch.zeros(self.data.num_nodes, dtype=torch.bool)
         self.data.test_mask[self.data.num_nodes - 500:] = 1
         epochs = 200
-
+        self.explainer = GNNExplainer(self.model, epochs=epochs)
         model = Net(num_features=train_dataset.num_features, num_classes=train_dataset.num_classes)
         self.model = train_model(model, epochs, self.data)
 
     def explain_node(self, node_idx):
         output = self.model(self.data.x, self.data.edge_index)
-        explainer = GNNExplainer(self.model, epochs=200)
+
         sub_adj, sub_feat, sub_labels, node_dict, sub_edge_index = get_neighbourhood(
             node_idx, self.data.edge_index, 3 + 1, self.data.x, output.argmax(dim=1))
         new_idx = int(node_dict[node_idx])
 
-        node_feat_mask, edge_mask = explainer.explain_node(new_idx, sub_feat, sub_edge_index)
+        node_feat_mask, edge_mask = self.explainer.explain_node(new_idx, sub_feat, sub_edge_index)
         labels = self.model(sub_feat, sub_edge_index[:,(edge_mask>=0.5)], self.data).argmax(dim=1)
         return node_feat_mask, edge_mask, labels
 
 
-gnnexplain = gnn_example()
+gnnexplain = gnn_explainer()
 gnnexplain.explain_node(4)

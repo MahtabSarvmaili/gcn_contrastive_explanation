@@ -1,4 +1,5 @@
 import argparse
+import gc
 import sys
 import os
 import traceback
@@ -21,6 +22,7 @@ sys.path.append('../..')
 
 
 def main(gae_args, explainer_args):
+    torch.cuda.empty_cache()
     data = load_data(explainer_args)
     data_AE = load_data_AE(explainer_args)
     # data =load_synthetic(gen_syn2, device=explainer_args.device)
@@ -227,6 +229,8 @@ def main(gae_args, explainer_args):
                 f'_{i}_counter_factual_{explainer_args.graph_result_name}_sub_graph_'
             )
             print('yes!')
+            torch.cuda.empty_cache()
+            gc.collect()
         except:
             traceback.print_exc()
             pass
@@ -240,50 +244,55 @@ if __name__ == '__main__':
     parser.add_argument('--hidden2', type=int, default=16, help='Number of units in hidden layer 2.')
     parser.add_argument('--lr', type=float, default=0.01, help='Initial learning rate.')
     parser.add_argument('--dropout', type=float, default=0.0, help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset-str', type=str, default='cora', help='type of dataset.')
+    parser.add_argument('--dataset_str', type=str, default='cora', help='type of dataset.')
     gae_args = parser.parse_args()
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--device', type=str, default='cuda', help='torch device.')
-    parser.add_argument('--bb-epochs', type=int, default=500, help='Number of epochs to train the ')
-    parser.add_argument('--cf-epochs', type=int, default=300, help='Number of epochs to train the ')
+    parser.add_argument('--bb_epochs', type=int, default=500, help='Number of epochs to train the ')
+    parser.add_argument('--cf_epochs', type=int, default=300, help='Number of epochs to train the ')
     parser.add_argument('--inputdim', type=int, default=10, help='Input dimension')
     parser.add_argument('--hidden', type=int, default=20, help='Number of units in hidden layer 1.')
-    parser.add_argument('--n-layers', type=int, default=3, help='Number of units in hidden layer 1.')
+    parser.add_argument('--n_layers', type=int, default=3, help='Number of units in hidden layer 1.')
     parser.add_argument('--lr', type=float, default=0.005, help='Initial learning rate.')
-    parser.add_argument('--cf-lr', type=float, default=0.009, help='CF-explainer learning rate.')
+    parser.add_argument('--cf_lr', type=float, default=0.009, help='CF-explainer learning rate.')
     parser.add_argument('--dropout', type=float, default=0.2, help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--cf-optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset-str', type=str, default='cora', help='type of dataset.')
-    parser.add_argument('--dataset-func', type=str, default='Planetoid', help='type of dataset.')
+    parser.add_argument('--cf_optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
+    parser.add_argument('--dataset_str', type=str, default='cora', help='type of dataset.')
+    parser.add_argument('--dataset_func', type=str, default='Planetoid', help='type of dataset.')
     parser.add_argument('--beta', type=float, default=0.5, help='beta variable')
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
     parser.add_argument('--edge-addition', type=bool, default=False, help='CF edge_addition')
-    parser.add_argument('--graph-result-dir', type=str, default='./results', help='Result directory')
+    parser.add_argument('--graph_result_dir', type=str, default='./results', help='Result directory')
     parser.add_argument('--algorithm', type=str, default='', help='Result directory')
-    parser.add_argument('--graph-result-name', type=str, default='', help='Result name')
+    parser.add_argument('--graph_result_name', type=str, default='', help='Result name')
     parser.add_argument('--cf_train_loss', type=str, default='',
                         help='CF explainer loss function')
     parser.add_argument('--cf_train_PN', type=bool, default=False, help='CF explainer loss function')
-    parser.add_argument('--n-momentum', type=float, default=0.5, help='Nesterov momentum')
+    parser.add_argument('--n_momentum', type=float, default=0.5, help='Nesterov momentum')
     explainer_args = parser.parse_args()
 
     algorithms = [
-        'cfgnn', 'loss_PN_L1_L2', 'loss_PN_AE_L1_L2_dist', 'loss_PN_AE_L1_L2', 'loss_PN_AE_', 'loss_PN', 'loss_PN_dist'
+        # 'cfgnn', 'loss_PN_L1_L2',
+        'loss_PN_AE_L1_L2_dist', 'loss_PN_AE_L1_L2', 'loss_PN_AE_', 'loss_PN', 'loss_PN_dist'
     ]
+    datasets = ['cora', 'citeseer', 'pubmed']
     for a in algorithms:
+        for b in datasets:
 
-        explainer_args.algorithm = a
-        explainer_args.graph_result_name = a
-        explainer_args.cf_train_loss = a
-        if os.listdir(f'{explainer_args.graph_result_dir}/'
-                      f'{explainer_args.dataset_str}/'
-                      f'edge_addition_{explainer_args.edge_addition}/'
-                      ).__contains__(explainer_args.algorithm) is False:
-            os.mkdir(
-                f'{explainer_args.graph_result_dir}/'
-                f'{explainer_args.dataset_str}/'
-                f'edge_addition_{explainer_args.edge_addition}/'
-                f'{explainer_args.algorithm}'
-            )
-        main(gae_args, explainer_args)
+            explainer_args.algorithm = a
+            explainer_args.graph_result_name = a
+            explainer_args.cf_train_loss = a
+            explainer_args.dataset_str = b
+            gae_args.dataset_str = b
+            if os.listdir(f'{explainer_args.graph_result_dir}/'
+                          f'{explainer_args.dataset_str}/'
+                          f'edge_addition_{explainer_args.edge_addition}/'
+                          ).__contains__(explainer_args.algorithm) is False:
+                os.mkdir(
+                    f'{explainer_args.graph_result_dir}/'
+                    f'{explainer_args.dataset_str}/'
+                    f'edge_addition_{explainer_args.edge_addition}/'
+                    f'{explainer_args.algorithm}'
+                )
+            main(gae_args, explainer_args)
