@@ -3,11 +3,13 @@ from torch_geometric.utils import dense_to_sparse
 import pandas as pd
 import numpy as np
 from utils import normalize_adj
+import networkx as nx
+
 torch.manual_seed(0)
 np.random.seed(0)
 
 
-def fidelity_size_sparsity(model, sub_feat, sub_adj, cf_examples, name='', device='cuda'):
+def graph_evaluation_metrics(model, sub_feat, sub_adj, cf_examples, g, cf_g, name='', device='cuda'):
 
     b = model.forward(sub_feat, normalize_adj(sub_adj, device), logit=False)
     res = []
@@ -27,7 +29,15 @@ def fidelity_size_sparsity(model, sub_feat, sub_adj, cf_examples, name='', devic
         ae = cf_examples[i][15]
         res.append([f, s, l, lpur, lgd, l1, l2, ae])
 
-    df = pd.DataFrame(res, columns=['fidelity', 'sparsity', 'l1_norm', 'loss_perturb', 'loss_dist', 'l1_p_hat', 'l2_p_hat', 'ae_dist'])
+    df = pd.DataFrame(
+        res,
+        columns=[
+            'fidelity', 'sparsity',
+            'l1_norm', 'loss_perturb',
+            'loss_dist', 'l1_p_hat',
+            'l2_p_hat', 'ae_dist',
+        ]
+    )
     df.to_csv(f'{name}.csv', index=False)
 
 

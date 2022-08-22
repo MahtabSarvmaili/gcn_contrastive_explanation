@@ -10,8 +10,10 @@ from utils import normalize_adj, get_neighbourhood
 from model import GCN, train
 from cf_explainer import CFExplainer
 from gae.GAE import gae
-from visualization import plot_graph
-from evaluation.evaluation import fidelity_size_sparsity, insertion, deletion
+from visualization import plot_graph, plot_centrality
+from evaluation.evaluation import graph_evaluation_metrics, insertion, deletion
+from evaluation.evaluation_metrics import gen_graph, centrality, clustering
+from torch_geometric.utils import dense_to_sparse
 torch.manual_seed(0)
 np.random.seed(0)
 
@@ -145,7 +147,12 @@ def main(gae_args, explainer_args):
                 f'_{i}_sub_adj_{explainer_args.graph_result_name}.png',
                 sub_edge_index.t().cpu().numpy()
             )
+
+            nodes = list(range(sub_adj.shape[0]))
+            g = gen_graph(nodes, sub_edge_index.cpu().t().numpy())
+            cen = centrality(g)
             for j, x in enumerate(cf_example):
+
                 cf_sub_adj = x[2]
                 if cf_sub_adj.sum()< sub_adj.sum():
                     del_edge_adj = 1* (cf_sub_adj<sub_adj.cpu().numpy())
@@ -162,41 +169,57 @@ def main(gae_args, explainer_args):
                         f'_epoch_{x[3]}_'
                         f'{explainer_args.graph_result_name}__removed_edges__.png',
                     )
-                    insertion(
-                        model,
-                        sub_feat,
-                        cf_sub_adj,
-                        del_edge_adj,
-                        x[8].numpy(),
-                        new_idx,
-                        name= f'{explainer_args.graph_result_dir}/'
+                    cf_edge_index = dense_to_sparse(torch.tensor(cf_sub_adj))[0].t().cpu().numpy()
+                    cf_nodes = list(range(cf_sub_adj.shape[0]))
+                    cf_g = gen_graph(cf_nodes, cf_edge_index)
+                    cf_cen = centrality(cf_g)
+                    plot_centrality(
+                        cen, cf_cen,
+                        f'{explainer_args.graph_result_dir}/'
                         f'{explainer_args.dataset_str}/'
                         f'edge_addition_{explainer_args.edge_addition}/'
                         f'{explainer_args.algorithm}/'
                         f'_{i}_counter_factual_{j}_'
                         f'_epoch_{x[3]}_'
-                        f'{explainer_args.graph_result_name}__insertion__',
+                        f'{explainer_args.graph_result_name}__centrality__'
                     )
-                    deletion(
-                        model,
-                        sub_feat,
-                        sub_adj.cpu().numpy(),
-                        del_edge_adj,
-                        sub_output.cpu().numpy(),
-                        new_idx,
-                        name=f'{explainer_args.graph_result_dir}/'
-                             f'{explainer_args.dataset_str}/'
-                             f'edge_addition_{explainer_args.edge_addition}/'
-                             f'{explainer_args.algorithm}/'
-                             f'_{i}_counter_factual_{j}_'
-                             f'_epoch_{x[3]}_'
-                             f'{explainer_args.graph_result_name}__deletion__',
-                    )
-            fidelity_size_sparsity(
+                    # insertion(
+                    #     model,
+                    #     sub_feat,
+                    #     cf_sub_adj,
+                    #     del_edge_adj,
+                    #     x[8].numpy(),
+                    #     new_idx,
+                    #     name= f'{explainer_args.graph_result_dir}/'
+                    #     f'{explainer_args.dataset_str}/'
+                    #     f'edge_addition_{explainer_args.edge_addition}/'
+                    #     f'{explainer_args.algorithm}/'
+                    #     f'_{i}_counter_factual_{j}_'
+                    #     f'_epoch_{x[3]}_'
+                    #     f'{explainer_args.graph_result_name}__insertion__',
+                    # )
+                    # deletion(
+                    #     model,
+                    #     sub_feat,
+                    #     sub_adj.cpu().numpy(),
+                    #     del_edge_adj,
+                    #     sub_output.cpu().numpy(),
+                    #     new_idx,
+                    #     name=f'{explainer_args.graph_result_dir}/'
+                    #          f'{explainer_args.dataset_str}/'
+                    #          f'edge_addition_{explainer_args.edge_addition}/'
+                    #          f'{explainer_args.algorithm}/'
+                    #          f'_{i}_counter_factual_{j}_'
+                    #          f'_epoch_{x[3]}_'
+                    #          f'{explainer_args.graph_result_name}__deletion__',
+                    # )
+            graph_evaluation_metrics(
                 model,
                 sub_feat,
                 sub_adj,
                 cf_example,
+                g,
+                cf_g,
                 f'{explainer_args.graph_result_dir}/'
                 f'{explainer_args.dataset_str}/'
                 f'edge_addition_{explainer_args.edge_addition}/'
@@ -236,21 +259,31 @@ if __name__ == '__main__':
     parser.add_argument('--beta', type=float, default=0.5, help='beta variable')
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
     parser.add_argument('--edge-addition', type=bool, default=False, help='CF edge_addition')
-    parser.add_argument('--algorithm', type=str, default='loss_PN_dist', help='Result directory')
     parser.add_argument('--graph-result-dir', type=str, default='./results', help='Result directory')
-    parser.add_argument('--graph-result-name', type=str, default='loss_PN_dist', help='Result name')
-    parser.add_argument('--cf_train_loss', type=str, default='loss_PN_dist', help='CF explainer loss function')
+    parser.add_argument('--algorithm', type=str, default='', help='Result directory')
+    parser.add_argument('--graph-result-name', type=str, default='', help='Result name')
+    parser.add_argument('--cf_train_loss', type=str, default='',
+                        help='CF explainer loss function')
+    parser.add_argument('--cf_train_PN', type=bool, default=False, help='CF explainer loss function')
     parser.add_argument('--n-momentum', type=float, default=0.5, help='Nesterov momentum')
     explainer_args = parser.parse_args()
 
-    if os.listdir(f'{explainer_args.graph_result_dir}/'
-                  f'{explainer_args.dataset_str}/'
-                  f'edge_addition_{explainer_args.edge_addition}/'
-                  ).__contains__(explainer_args.algorithm) is False:
-        os.mkdir(
-            f'{explainer_args.graph_result_dir}/'
-            f'{explainer_args.dataset_str}/'
-            f'edge_addition_{explainer_args.edge_addition}/'
-            f'{explainer_args.algorithm}'
-        )
-    main(gae_args, explainer_args)
+    algorithms = [
+        'cfgnn', 'loss_PN_L1_L2', 'loss_PN_AE_L1_L2_dist', 'loss_PN_AE_L1_L2', 'loss_PN_AE_', 'loss_PN', 'loss_PN_dist'
+    ]
+    for a in algorithms:
+
+        explainer_args.algorithm = a
+        explainer_args.graph_result_name = a
+        explainer_args.cf_train_loss = a
+        if os.listdir(f'{explainer_args.graph_result_dir}/'
+                      f'{explainer_args.dataset_str}/'
+                      f'edge_addition_{explainer_args.edge_addition}/'
+                      ).__contains__(explainer_args.algorithm) is False:
+            os.mkdir(
+                f'{explainer_args.graph_result_dir}/'
+                f'{explainer_args.dataset_str}/'
+                f'edge_addition_{explainer_args.edge_addition}/'
+                f'{explainer_args.algorithm}'
+            )
+        main(gae_args, explainer_args)

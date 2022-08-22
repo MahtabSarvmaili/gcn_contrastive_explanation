@@ -206,3 +206,17 @@ def plot_errors(losses, path):
     axs[2].plot(x, losses['l2_AE'])
     axs[2].legend(['L1', 'L2', 'l2_AE'])
     plt.savefig(path)
+    plt.close()
+
+
+def plot_centrality(cen: dict, cf_cen:dict, name):
+    for x in cen.keys():
+        fig = plt.figure()
+        ax = fig.add_axes([0, 0, 1, 1])
+        ax.fill_between(cf_cen[x].keys(), cf_cen[x].values(), color="lightpink", alpha=0.5, label='CF_'+x)
+        ax.plot(cf_cen[x].keys(), cf_cen[x].values(), color="hotpink", alpha=0.5)
+        ax.fill_between(cen[x].keys(), cen[x].values(), color="skyblue", alpha=0.5, label='Adj_'+x)
+        ax.plot(cen[x].keys(), cen[x].values(), color="Slateblue", alpha=0.5)
+        ax.legend()
+        plt.savefig(name+x+'.png', bbox_inches='tight')
+        plt.close()

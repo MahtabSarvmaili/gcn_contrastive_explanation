@@ -96,6 +96,21 @@ class GCNSyntheticPerturb(nn.Module):
         self.lin = nn.Linear(nhid + nhid + nout, nclass)
         self.dropout = dropout
 
+    def __L1__(self):
+        return torch.linalg.norm(self.P_hat_symm, ord=1)
+
+    def __L2__(self):
+        return torch.linalg.norm(self.P_hat_symm, ord=2)
+
+    def __AE_recons__(self, graph_AE, x, cf_adj):
+        cf_adj_sparse = dense_to_sparse(cf_adj)[0]
+        reconst_P = (torch.sigmoid(graph_AE.forward(x, cf_adj_sparse)) >= self.AE_threshold).float()
+        l2_AE = torch.dist(cf_adj, reconst_P, p=2)
+        return l2_AE
+
+    def __loss_graph_dist__(self, cf_adj):
+        return torch.dist(cf_adj , self.adj.cuda(), p=1) / 2
+
     def reset_parameters(self, eps=10 ** -4):
         # Think more about how to initialize this
         with torch.no_grad():

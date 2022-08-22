@@ -21,7 +21,7 @@ class CFExplainer:
     def __init__(
             self, model, graph_ae, sub_adj, sub_feat, n_hid, dropout, lr, n_momentum, cf_optimizer,
             sub_labels, y_pred_orig, num_classes, beta, device, AE_threshold, algorithm='cfgnn',
-            edge_addition=True, kappa=10
+            edge_addition=False, kappa=10
     ):
 
         super(CFExplainer, self).__init__()
