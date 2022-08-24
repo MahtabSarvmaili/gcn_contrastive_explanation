@@ -1,19 +1,12 @@
-from torch_geometric.datasets import Planetoid
+import sys
+sys.path.append('../utils.py')
 from torch_geometric.nn import GCNConv, GNNExplainer, Linear
 from explainers.PGExplainer import PGExplainer
-import torch_geometric.transforms as T
 import torch
-import torch.nn.functional as F
-import os
-import sys
-import pandas as pd
-from tqdm import trange
-from torch_geometric.utils import to_dense_adj
-from utils import normalize_adj, get_neighbourhood
+from utils.graph_utils import normalize_adj, get_neighbourhood
 import numpy as np
 torch.manual_seed(0)
 np.random.seed(0)
-sys.path.append('../..')
 
 
 class gnn_explainer:
@@ -43,7 +36,7 @@ class pg_explainer:
         self.model = model
         self.data = train_dataset
 
-    def explain_node(self, node_idx):
+    def explain_node(self, node_idx, node_indices):
 
         output = self.model(self.data.x, self.data.edge_index)
 

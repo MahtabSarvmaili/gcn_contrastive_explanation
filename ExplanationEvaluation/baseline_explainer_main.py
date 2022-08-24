@@ -1,6 +1,9 @@
+import sys
+sys.path.insert(0,"../utils.py")
 from torch_geometric.datasets import Planetoid
 from torch_geometric.nn import GCNConv, GNNExplainer, Linear
-from baseline_explainers import gnn_explainer, pg_explainer
+from explainers.PGExplainer import PGExplainer
+from utils.graph_utils import normalize_adj, get_neighbourhood
 import torch_geometric.transforms as T
 import torch
 import torch.nn.functional as F
@@ -18,6 +21,8 @@ sys.path.append('../../')
 class Net(torch.nn.Module):
     def __init__(self, num_features, dim=20, num_classes=1):
         super(Net, self).__init__()
+        self.embedding_size = 20
+
         self.conv1 = GCNConv(num_features, dim)
         self.conv2 = GCNConv(dim, dim)
         self.conv3 = GCNConv(dim, dim)
@@ -32,6 +37,18 @@ class Net(torch.nn.Module):
         x = self.lin(torch.cat((x1, x2, x3), dim=1))
 
         return F.log_softmax(x, dim=1)
+
+    def embedding(self, x, edge_index):
+        stack = []
+        x1 = F.relu(self.conv1(x, edge_index))
+        x1 = F.dropout(x1, training=self.training)
+        stack.append(x1)
+        x2 = F.relu(self.conv2(x1, edge_index))
+        x2 = F.dropout(x2, training=self.training)
+        stack.append(x2)
+
+        x3 = self.conv3(x2, edge_index)
+        return x3
 
 
 def test(model, data):
@@ -49,8 +66,8 @@ def train_model(model, epochs, data):
     loss = 999.0
     train_acc = 0.0
     test_acc = 0.0
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-3)
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.005, weight_decay=5e-4)
+    device = torch.device('cpu')
     t = trange(epochs, desc="Stats: ", position=0)
     model = model.to(device)
     for epoch in t:
@@ -77,7 +94,7 @@ def train_model(model, epochs, data):
 
 
 def main():
-    device = 'cuda'
+    device = 'cpu'
     dataset = 'cora'
     path = os.path.join(os.getcwd(), 'data', 'Planetoid')
     transformer = T.Compose([
@@ -86,15 +103,15 @@ def main():
         T.RandomNodeSplit(num_val=0.1, num_test=0.2),
     ])
     train_dataset = Planetoid(path, dataset, transform=transformer)[0]
-    model = Net(num_features=train_dataset.num_features, num_classes=train_dataset.num_classes)
-    train_model(model, epochs=100, data=train_dataset)
-    test(model, train_dataset)
-    pgexp = pg_explainer(model, train_dataset)
-    gnnexp = gnn_explainer(model, train_dataset)
     idx_test = np.arange(0, train_dataset.num_nodes)[train_dataset.test_mask.cpu()]
-    pgexp.explain_node(
-
-    )
+    idx_test = [int(x) for x in idx_test]
+    model = Net(num_features=train_dataset.num_features, num_classes=train_dataset.y.unique().__len__())
+    train_model(model, epochs=200, data=train_dataset)
+    output = model(train_dataset.x, train_dataset.edge_index)
+    for node_idx in idx_test:
+        pgexplainer = PGExplainer(model, train_dataset.edge_index, train_dataset.x, 'node')
+        pgexplainer.prepare(idx_test)
+        graph, expl = pgexplainer.explain(node_idx)
 
 
 if __name__ == '__main__':

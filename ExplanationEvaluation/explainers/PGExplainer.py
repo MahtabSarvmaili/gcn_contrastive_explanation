@@ -36,7 +36,7 @@ class PGExplainer(BaseExplainer):
         self.temp = temp
         self.reg_coefs = reg_coefs
         self.sample_bias = sample_bias
-
+        self.device = torch.device('cpu')
         if self.type == "graph":
             self.expl_embedding = self.model_to_explain.embedding_size * 2
         else:
@@ -78,6 +78,7 @@ class PGExplainer(BaseExplainer):
             bias = bias + 0.0001  # If bias is 0, we run into problems
             eps = (bias - (1-bias)) * torch.rand(sampling_weights.size()) + (1-bias)
             gate_inputs = torch.log(eps) - torch.log(1 - eps)
+            gate_inputs = gate_inputs.to(self.device)
             gate_inputs = (gate_inputs + sampling_weights) / temperature
             graph =  torch.sigmoid(gate_inputs)
         else:
@@ -99,7 +100,7 @@ class PGExplainer(BaseExplainer):
 
         # Regularization losses
         size_loss = torch.sum(mask) * size_reg
-        mask_ent_reg = -mask * torch.log(mask) - (1 - mask) * torch.log(1 - mask)
+        mask_ent_reg = -mask * mask.log() - (1 - mask) * (1 - mask).log()
         mask_ent_loss = entropy_reg * torch.mean(mask_ent_reg)
 
         # Explanation loss
@@ -119,6 +120,7 @@ class PGExplainer(BaseExplainer):
             nn.Linear(64, 1),
         )
 
+        self.explainer_model.to(self.device)
         if indices is None: # Consider all indices
             indices = range(0, self.graphs.size(0))
 
@@ -144,7 +146,7 @@ class PGExplainer(BaseExplainer):
         # Start training loop
         for e in tqdm(range(0, self.epochs)):
             optimizer.zero_grad()
-            loss = torch.FloatTensor([0]).detach()
+            loss = torch.FloatTensor([0]).detach().to(self.device)
             t = temp_schedule(e)
 
             for n in indices:
@@ -163,7 +165,7 @@ class PGExplainer(BaseExplainer):
                 sampling_weights = self.explainer_model(input_expl)
                 mask = self._sample_graph(sampling_weights, t, bias=self.sample_bias).squeeze()
 
-                masked_pred = self.model_to_explain(feats, graph, edge_weights=mask)
+                masked_pred = self.model_to_explain(feats, graph)
                 original_pred = self.model_to_explain(feats, graph)
 
                 if self.type == 'node': # we only care for the prediction of the node
