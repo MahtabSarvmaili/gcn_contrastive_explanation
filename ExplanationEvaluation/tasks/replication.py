@@ -119,7 +119,7 @@ def store_results(auc, auc_std, inf_time, checkpoint, config):
                  "Validation Accuracy": checkpoint["val_acc"],
                  "Test Accuracy": checkpoint["test_acc"], }
 
-    explainer_params = {"Explainer": config.gnnexplainer,
+    explainer_params = {"Explainer": config.pg_explainer,
                         "Model": config.model,
                         "Dataset": config.dataset}
 
@@ -129,7 +129,7 @@ def store_results(auc, auc_std, inf_time, checkpoint, config):
 
     save_dir = "./results"
     os.makedirs(save_dir, exist_ok=True)
-    with open(f"./results/P_{config.gnnexplainer}_M_{config.model}_D_{config.dataset}_results.json", "w") as fp:
+    with open(f"./results/P_{config.pg_explainer}_M_{config.model}_D_{config.dataset}_results.json", "w") as fp:
         json.dump(json_dict, fp, indent=4)
 
 
@@ -164,7 +164,7 @@ def replication(config, extension=False, run_qual=True, results_store=True):
     if extension: indices = np.argwhere(test_mask).squeeze()
 
     # Get explainer
-    explainer = select_explainer(config.gnnexplainer,
+    explainer = select_explainer(config.pg_explainer,
                                  model=model,
                                  graphs=graphs,
                                  features=features,

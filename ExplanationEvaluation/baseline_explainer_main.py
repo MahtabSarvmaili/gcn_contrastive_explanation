@@ -1,17 +1,18 @@
 from torch_geometric.datasets import Planetoid
 from torch_geometric.nn import GCNConv, GNNExplainer, Linear
-from explainers.PGExplainer import PGExplainer
+from baseline_explainers import gnn_explainer, pg_explainer
 import torch_geometric.transforms as T
 import torch
 import torch.nn.functional as F
 import os
+import sys
 import pandas as pd
 from tqdm import trange
-from torch_geometric.utils import to_dense_adj
-from utils import normalize_adj, get_neighbourhood
+
 import numpy as np
 torch.manual_seed(0)
 np.random.seed(0)
+sys.path.append('../../')
 
 
 class Net(torch.nn.Module):
@@ -40,6 +41,7 @@ def test(model, data):
         pred = logits[mask].max(1)[1]
         acc = pred.eq(data.y[mask]).sum().item() / mask.sum().item()
         accs.append(acc)
+    print(f"Train accuracy {accs[0]}, Test Accuracy {accs[1]}")
     return accs
 
 
@@ -75,3 +77,25 @@ def train_model(model, epochs, data):
 
 
 def main():
+    device = 'cuda'
+    dataset = 'cora'
+    path = os.path.join(os.getcwd(), 'data', 'Planetoid')
+    transformer = T.Compose([
+        T.NormalizeFeatures(),
+        T.ToDevice(device),
+        T.RandomNodeSplit(num_val=0.1, num_test=0.2),
+    ])
+    train_dataset = Planetoid(path, dataset, transform=transformer)[0]
+    model = Net(num_features=train_dataset.num_features, num_classes=train_dataset.num_classes)
+    train_model(model, epochs=100, data=train_dataset)
+    test(model, train_dataset)
+    pgexp = pg_explainer(model, train_dataset)
+    gnnexp = gnn_explainer(model, train_dataset)
+    idx_test = np.arange(0, train_dataset.num_nodes)[train_dataset.test_mask.cpu()]
+    pgexp.explain_node(
+
+    )
+
+
+if __name__ == '__main__':
+    main()

@@ -152,7 +152,7 @@ def plot(graph, edge_weigths, labels, idx, thres_min, thres_snip, dataset, args=
     if show:
         plt.show()
     else:
-        save_path = f'./qualitative/e_{args.gnnexplainer}/m_{args.model}/d_{args.dataset}/'
+        save_path = f'./qualitative/e_{args.pg_explainer}/m_{args.model}/d_{args.dataset}/'
 
         # Generate folders if they do not exist
         Path(save_path).mkdir(parents=True, exist_ok=True)

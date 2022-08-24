@@ -264,35 +264,28 @@ if __name__ == '__main__':
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
     parser.add_argument('--edge-addition', type=bool, default=False, help='CF edge_addition')
     parser.add_argument('--graph_result_dir', type=str, default='./results', help='Result directory')
-    parser.add_argument('--algorithm', type=str, default='', help='Result directory')
-    parser.add_argument('--graph_result_name', type=str, default='', help='Result name')
-    parser.add_argument('--cf_train_loss', type=str, default='',
+    parser.add_argument('--algorithm', type=str, default='loss_PN', help='Result directory')
+    parser.add_argument('--graph_result_name', type=str, default='loss_PN', help='Result name')
+    parser.add_argument('--cf_train_loss', type=str, default='loss_PN',
                         help='CF explainer loss function')
     parser.add_argument('--cf_train_PN', type=bool, default=False, help='CF explainer loss function')
     parser.add_argument('--n_momentum', type=float, default=0.5, help='Nesterov momentum')
     explainer_args = parser.parse_args()
 
-    algorithms = [
-        # 'cfgnn', 'loss_PN_L1_L2',
-        'loss_PN_AE_L1_L2_dist', 'loss_PN_AE_L1_L2', 'loss_PN_AE_', 'loss_PN', 'loss_PN_dist'
-    ]
-    datasets = ['cora', 'citeseer', 'pubmed']
-    for a in algorithms:
-        for b in datasets:
+    # algorithms = [
+    #     'cfgnn', 'loss_PN_L1_L2',
+    #     'loss_PN_AE_L1_L2_dist', 'loss_PN_AE_L1_L2', 'loss_PN_AE_', 'loss_PN', 'loss_PN_dist'
+    # ]
+    # datasets = ['cora', 'citeseer', 'pubmed']
 
-            explainer_args.algorithm = a
-            explainer_args.graph_result_name = a
-            explainer_args.cf_train_loss = a
-            explainer_args.dataset_str = b
-            gae_args.dataset_str = b
-            if os.listdir(f'{explainer_args.graph_result_dir}/'
-                          f'{explainer_args.dataset_str}/'
-                          f'edge_addition_{explainer_args.edge_addition}/'
-                          ).__contains__(explainer_args.algorithm) is False:
-                os.mkdir(
-                    f'{explainer_args.graph_result_dir}/'
-                    f'{explainer_args.dataset_str}/'
-                    f'edge_addition_{explainer_args.edge_addition}/'
-                    f'{explainer_args.algorithm}'
-                )
-            main(gae_args, explainer_args)
+    if os.listdir(f'{explainer_args.graph_result_dir}/'
+                  f'{explainer_args.dataset_str}/'
+                  f'edge_addition_{explainer_args.edge_addition}/'
+                  ).__contains__(explainer_args.algorithm) is False:
+        os.mkdir(
+            f'{explainer_args.graph_result_dir}/'
+            f'{explainer_args.dataset_str}/'
+            f'edge_addition_{explainer_args.edge_addition}/'
+            f'{explainer_args.algorithm}'
+        )
+    main(gae_args, explainer_args)
