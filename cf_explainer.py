@@ -20,7 +20,7 @@ class CFExplainer:
 
     def __init__(
             self, model, graph_ae, sub_adj, sub_feat, n_hid, dropout, lr, n_momentum, cf_optimizer,
-            sub_labels, y_pred_orig, num_classes, beta, device, AE_threshold, algorithm='cfgnn',
+            sub_labels, y_pred_orig, num_classes, beta, device, AE_threshold, PN_PP="PN", cf_expl=True, algorithm='cfgnn',
             edge_addition=False, kappa=10
     ):
 
@@ -42,11 +42,13 @@ class CFExplainer:
         self.kappa = kappa
         self.edge_addition = edge_addition
         self.algorithm = algorithm
+        self.cf_expl = cf_expl
         self.losses = {'loss_total':[], 'loss_perturb':[], 'loss_graph_dist':[], 'L1':[], 'L2':[], 'l2_AE':[]}
         # Instantiate CF model class, load weights from original model
         self.cf_model = GCNSyntheticPerturb(
             self.sub_feat.shape[1], n_hid, n_hid,
-            self.num_classes, self.sub_adj, dropout, beta, AE_threshold=AE_threshold, edge_addition=edge_addition
+            self.num_classes, self.sub_adj, dropout,
+            beta, AE_threshold=AE_threshold, PN_PP=PN_PP, edge_addition=edge_addition
         )
 
         self.cf_model.load_state_dict(self.model.state_dict(), strict=False)
@@ -87,28 +89,28 @@ class CFExplainer:
                 output[self.new_idx], self.y_pred_orig, y_pred_new_actual
             )
         elif self.algorithm == 'loss_PN_L1_L2':
-            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss_PN_L1_L2(
-                output[self.new_idx], self.y_orig_onehot
+            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss__(
+                self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot, l1=1, l2=1, ae=0, dist=0
             )
         elif self.algorithm == 'loss_PN_AE_L1_L2_dist':
-            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss_PN_AE_L1_L2_dist(
-                self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot
+            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss__(
+                self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot, l1=1, l2=1, ae=1, dist=1
             )
         elif self.algorithm == 'loss_PN_AE_L1_L2':
-            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss_PN_AE_L1_L2(
-                self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot
+            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss__(
+                self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot, l1=1, l2=1, ae=1, dist=0
             )
         elif self.algorithm == 'loss_PN_AE_':
-            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss_PN_AE_(
-                self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot
+            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss__(
+                self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot, l1=0, l2=0, ae=1, dist=0
             )
         elif self.algorithm == 'loss_PN':
-            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss_PN(
-                output[self.new_idx], self.y_orig_onehot
+            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss__(
+                self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot, l1=0, l2=0, ae=0, dist=0
             )
         elif self.algorithm == 'loss_PN_dist':
-            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss_PN_dist(
-                output[self.new_idx], self.y_orig_onehot
+            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss__(
+                self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot, l1=0, l2=0, ae=0, dist=1
             )
 
         self.losses['loss_total'].append(loss_total.item())
@@ -133,17 +135,30 @@ class CFExplainer:
             )
             print(" ")
         cf_stats = []
-        if y_pred_new_actual != self.y_pred_orig:
-            cf_stats = [
-                self.node_idx.item(), self.new_idx.item(),
-                cf_adj.cpu().detach().numpy(), epoch,
-                self.y_pred_orig.item(), y_pred_new.item(),
-                y_pred_new_actual.item(), self.sub_labels[self.new_idx].cpu().detach().numpy(),
-                output_actual.argmax(dim=1).cpu(), self.sub_adj.shape[0],
-                loss_total.item(), loss_perturb.item(),
-                loss_graph_dist.item(), L1,
-                L2, l2_AE,
-            ]
+        if self.cf_expl:
+            if y_pred_new_actual != self.y_pred_orig:
+                cf_stats = [
+                    self.node_idx.item(), self.new_idx.item(),
+                    cf_adj.cpu().detach().numpy(), epoch,
+                    self.y_pred_orig.item(), y_pred_new.item(),
+                    y_pred_new_actual.item(), self.sub_labels[self.new_idx].cpu().detach().numpy(),
+                    output_actual.argmax(dim=1).cpu(), self.sub_adj.shape[0],
+                    loss_total.item(), loss_perturb.item(),
+                    loss_graph_dist.item(), L1,
+                    L2, l2_AE,
+                ]
+        else:
+            if y_pred_new_actual == self.y_pred_orig:
+                cf_stats = [
+                    self.node_idx.item(), self.new_idx.item(),
+                    cf_adj.cpu().detach().numpy(), epoch,
+                    self.y_pred_orig.item(), y_pred_new.item(),
+                    y_pred_new_actual.item(), self.sub_labels[self.new_idx].cpu().detach().numpy(),
+                    output_actual.argmax(dim=1).cpu(), self.sub_adj.shape[0],
+                    loss_total.item(), loss_perturb.item(),
+                    loss_graph_dist.item(), L1,
+                    L2, l2_AE,
+                ]
         return cf_stats, loss_perturb
 
     def explain(

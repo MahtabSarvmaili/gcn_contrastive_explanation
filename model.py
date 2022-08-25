@@ -97,6 +97,7 @@ def train(
             # loss_tr_.append(loss_train.cpu().detach().numpy())
             # loss_val_.append(loss_val.cpu().detach().numpy())
             epochs_.append(i)
+            return model
 
 
 def test(

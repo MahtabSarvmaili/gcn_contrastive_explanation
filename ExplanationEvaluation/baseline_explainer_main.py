@@ -108,10 +108,12 @@ def main():
     model = Net(num_features=train_dataset.num_features, num_classes=train_dataset.y.unique().__len__())
     train_model(model, epochs=200, data=train_dataset)
     output = model(train_dataset.x, train_dataset.edge_index)
+    gnnexplainer = GNNExplainer(model, num_hops=4)
     for node_idx in idx_test:
         pgexplainer = PGExplainer(model, train_dataset.edge_index, train_dataset.x, 'node')
         pgexplainer.prepare(idx_test)
         graph, expl = pgexplainer.explain(node_idx)
+        node_feat_mask, edge_mask =gnnexplainer.explain_node(node_idx, train_dataset.x, train_dataset.edge_index)
 
 
 if __name__ == '__main__':

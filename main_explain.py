@@ -51,7 +51,7 @@ def main(gae_args, explainer_args):
     if explainer_args.device=='cuda':
         model = model.cuda()
 
-    train(
+    model = train(
         model=model,
         features=data['features'],
         train_adj=data['adj_norm'],
@@ -114,6 +114,8 @@ def main(gae_args, explainer_args):
                 beta=explainer_args.beta,
                 device=explainer_args.device,
                 AE_threshold=AE_threshold[explainer_args.dataset_str],
+                PN_PP=explainer_args.PN_PP,
+                cf_expl=explainer_args.cf_expl,
                 algorithm=explainer_args.algorithm,
                 edge_addition=explainer_args.edge_addition
             )
@@ -124,7 +126,8 @@ def main(gae_args, explainer_args):
                 num_epochs=explainer_args.cf_epochs,
                 path=f'{explainer_args.graph_result_dir}/'
                 f'{explainer_args.dataset_str}/'
-                f'edge_addition_{explainer_args.edge_addition}/'
+                f'cf_expl_{explainer_args.cf_expl}/'
+                f'pn_pp_{explainer_args.PN_PP}/'
                 f'{explainer_args.algorithm}/'
                 f'_{i}_loss_.png'
             )
@@ -134,7 +137,8 @@ def main(gae_args, explainer_args):
                 new_idx,
                 f'{explainer_args.graph_result_dir}/'
                 f'{explainer_args.dataset_str}/'
-                f'edge_addition_{explainer_args.edge_addition}/'
+                f'cf_expl_{explainer_args.cf_expl}/'
+                f'pn_pp_{explainer_args.PN_PP}/'
                 f'{explainer_args.algorithm}/'
                 f'_{i}_sub_adj_{explainer_args.graph_result_name}.png'
             )
@@ -144,7 +148,8 @@ def main(gae_args, explainer_args):
                 new_idx,
                 f'{explainer_args.graph_result_dir}/'
                 f'{explainer_args.dataset_str}/'
-                f'edge_addition_{explainer_args.edge_addition}/'
+                f'cf_expl_{explainer_args.cf_expl}/'
+                f'pn_pp_{explainer_args.PN_PP}/'
                 f'{explainer_args.algorithm}/'
                 f'_{i}_sub_adj_{explainer_args.graph_result_name}.png',
                 sub_edge_index.t().cpu().numpy()
@@ -165,7 +170,8 @@ def main(gae_args, explainer_args):
                         new_idx,
                         f'{explainer_args.graph_result_dir}/'
                         f'{explainer_args.dataset_str}/'
-                        f'edge_addition_{explainer_args.edge_addition}/'
+                        f'cf_expl_{explainer_args.cf_expl}/'
+                        f'pn_pp_{explainer_args.PN_PP}/'
                         f'{explainer_args.algorithm}/'
                         f'_{i}_counter_factual_{j}_'
                         f'_epoch_{x[3]}_'
@@ -179,42 +185,13 @@ def main(gae_args, explainer_args):
                         cen, cf_cen,
                         f'{explainer_args.graph_result_dir}/'
                         f'{explainer_args.dataset_str}/'
-                        f'edge_addition_{explainer_args.edge_addition}/'
+                        f'cf_expl_{explainer_args.cf_expl}/'
+                        f'pn_pp_{explainer_args.PN_PP}/'
                         f'{explainer_args.algorithm}/'
                         f'_{i}_counter_factual_{j}_'
                         f'_epoch_{x[3]}_'
                         f'{explainer_args.graph_result_name}__centrality__'
                     )
-                    # insertion(
-                    #     model,
-                    #     sub_feat,
-                    #     cf_sub_adj,
-                    #     del_edge_adj,
-                    #     x[8].numpy(),
-                    #     new_idx,
-                    #     name= f'{explainer_args.graph_result_dir}/'
-                    #     f'{explainer_args.dataset_str}/'
-                    #     f'edge_addition_{explainer_args.edge_addition}/'
-                    #     f'{explainer_args.algorithm}/'
-                    #     f'_{i}_counter_factual_{j}_'
-                    #     f'_epoch_{x[3]}_'
-                    #     f'{explainer_args.graph_result_name}__insertion__',
-                    # )
-                    # deletion(
-                    #     model,
-                    #     sub_feat,
-                    #     sub_adj.cpu().numpy(),
-                    #     del_edge_adj,
-                    #     sub_output.cpu().numpy(),
-                    #     new_idx,
-                    #     name=f'{explainer_args.graph_result_dir}/'
-                    #          f'{explainer_args.dataset_str}/'
-                    #          f'edge_addition_{explainer_args.edge_addition}/'
-                    #          f'{explainer_args.algorithm}/'
-                    #          f'_{i}_counter_factual_{j}_'
-                    #          f'_epoch_{x[3]}_'
-                    #          f'{explainer_args.graph_result_name}__deletion__',
-                    # )
             graph_evaluation_metrics(
                 model,
                 sub_feat,
@@ -224,7 +201,8 @@ def main(gae_args, explainer_args):
                 cf_g,
                 f'{explainer_args.graph_result_dir}/'
                 f'{explainer_args.dataset_str}/'
-                f'edge_addition_{explainer_args.edge_addition}/'
+                f'cf_expl_{explainer_args.cf_expl}/'
+                f'pn_pp_{explainer_args.PN_PP}/'
                 f'{explainer_args.algorithm}/'
                 f'_{i}_counter_factual_{explainer_args.graph_result_name}_sub_graph_'
             )
@@ -244,7 +222,7 @@ if __name__ == '__main__':
     parser.add_argument('--hidden2', type=int, default=16, help='Number of units in hidden layer 2.')
     parser.add_argument('--lr', type=float, default=0.01, help='Initial learning rate.')
     parser.add_argument('--dropout', type=float, default=0.0, help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset_str', type=str, default='citeseer', help='type of dataset.')
+    parser.add_argument('--dataset_str', type=str, default='cora', help='type of dataset.')
     gae_args = parser.parse_args()
 
     parser = argparse.ArgumentParser()
@@ -258,17 +236,18 @@ if __name__ == '__main__':
     parser.add_argument('--cf_lr', type=float, default=0.009, help='CF-explainer learning rate.')
     parser.add_argument('--dropout', type=float, default=0.2, help='Dropout rate (1 - keep probability).')
     parser.add_argument('--cf_optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset_str', type=str, default='citeseer', help='type of dataset.')
+    parser.add_argument('--dataset_str', type=str, default='cora', help='type of dataset.')
     parser.add_argument('--dataset_func', type=str, default='Planetoid', help='type of dataset.')
     parser.add_argument('--beta', type=float, default=0.1, help='beta variable')
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
     parser.add_argument('--edge-addition', type=bool, default=False, help='CF edge_addition')
     parser.add_argument('--graph_result_dir', type=str, default='./results', help='Result directory')
-    parser.add_argument('--algorithm', type=str, default='cfgnn', help='Result directory')
-    parser.add_argument('--graph_result_name', type=str, default='cfgnn', help='Result name')
-    parser.add_argument('--cf_train_loss', type=str, default='cfgnn',
+    parser.add_argument('--algorithm', type=str, default='loss_PN', help='Result directory')
+    parser.add_argument('--graph_result_name', type=str, default='loss_PN', help='Result name')
+    parser.add_argument('--cf_train_loss', type=str, default='loss_PN',
                         help='CF explainer loss function')
-    parser.add_argument('--cf_train_PN', type=bool, default=False, help='CF explainer loss function')
+    parser.add_argument('--PN_PP', type=str, default="PP", help='CF explainer loss function')
+    parser.add_argument('--cf_expl', type=bool, default=False, help='CF explainer loss function')
     parser.add_argument('--n_momentum', type=float, default=0.5, help='Nesterov momentum')
     explainer_args = parser.parse_args()
 
@@ -280,12 +259,14 @@ if __name__ == '__main__':
 
     if os.listdir(f'{explainer_args.graph_result_dir}/'
                   f'{explainer_args.dataset_str}/'
-                  f'edge_addition_{explainer_args.edge_addition}/'
+                  f'cf_expl_{explainer_args.cf_expl}/'
+                  f'pn_pp_{explainer_args.PN_PP}/'
                   ).__contains__(explainer_args.algorithm) is False:
         os.mkdir(
             f'{explainer_args.graph_result_dir}/'
             f'{explainer_args.dataset_str}/'
-            f'edge_addition_{explainer_args.edge_addition}/'
+            f'cf_expl_{explainer_args.cf_expl}/'
+            f'pn_pp_{explainer_args.PN_PP}/'
             f'{explainer_args.algorithm}'
         )
     main(gae_args, explainer_args)

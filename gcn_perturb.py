@@ -64,7 +64,7 @@ class GCNSyntheticPerturb(nn.Module):
 
     def __init__(
             self, nfeat, nhid, nout, nclass, adj, dropout,
-            beta, gamma=0.01, kappa=10, psi=0.01, AE_threshold=0.5, edge_addition=False, device='cuda'
+            beta, gamma=0.01, kappa=10, psi=0.01, AE_threshold=0.5, PN_PP="PN", edge_addition=False, device='cuda'
     ):
         super(GCNSyntheticPerturb, self).__init__()
         self.adj = adj
@@ -79,6 +79,7 @@ class GCNSyntheticPerturb(nn.Module):
         self.const = torch.tensor(0.0, device=device)
         self.gamma = torch.tensor(gamma, device=device)
         self.psi = torch.tensor(psi, device=device)
+        self.PN_PP = PN_PP
         # P_hat needs to be symmetric ==>
         # learn vector representing entries in upper/lower triangular matrix and use to populate P_hat later
         self.P_vec_size = int((self.num_nodes * self.num_nodes - self.num_nodes) / 2) + self.num_nodes
@@ -260,6 +261,24 @@ class GCNSyntheticPerturb(nn.Module):
         # Zero-out loss_pred with pred_same if prediction flips
         loss_total = pred_same * loss_pred + self.beta * loss_graph_dist
         return loss_total, loss_pred, loss_graph_dist, torch.inf, torch.inf, torch.inf, cf_adj
+
+    def loss__(self, graph_AE, x, output, y_orig_onehot, l1=1, l2=1, ae=1, dist=1):
+        if self.PN_PP == "PP":
+            loss_perturb = pertinent_positive_loss(output, y_orig_onehot, self.const, self.kappa)
+        else:
+            loss_perturb = pertinent_negative_loss(output, y_orig_onehot, self.const, self.kappa)
+        cf_adj = self.P * self.adj
+        cf_adj.requires_grad = True  # Need to change this otherwise loss_graph_dist has no gradient
+        loss_graph_dist = torch.dist(cf_adj , self.adj.cuda(), p=1) / 2
+        l2_AE = self.__AE_recons__(graph_AE, x, cf_adj)
+        L1 = self.__L1__()
+        L2 = self.__L2__()
+        loss_total = loss_perturb + dist*self.beta*loss_graph_dist + l1*self.psi*L1 + l2*L2 + ae*self.gamma*l2_AE
+        return loss_total, loss_perturb, loss_graph_dist, L1.item(), L2.item(), l2_AE.item(), cf_adj
+
+
+
+
 
     def loss_PN_L1_L2(self, output, y_orig_onehot):
 
