@@ -134,12 +134,10 @@ class GCNSyntheticPerturb(nn.Module):
         A_tilde = torch.FloatTensor(self.num_nodes, self.num_nodes)
         A_tilde.requires_grad = True
 
-        if self.edge_addition:  # Learn new adj matrix directly
-            A_tilde = torch.sigmoid(self.P_hat_symm) + torch.eye(self.num_nodes).cuda()
-            # Use sigmoid to bound P_hat in [0,1]
-        else:  # Learn P_hat that gets multiplied element-wise with adj -- only edge deletions
-            A_tilde = torch.sigmoid(self.P_hat_symm) * self.sub_adj.cuda() + torch.eye(
-                self.num_nodes).cuda()  # Use sigmoid to bound P_hat in [0,1]
+        # Learn P_hat that gets multiplied element-wise with adj -- only edge deletions
+        # Use sigmoid to bound P_hat in [0,1]
+        # no need for self loop since we normalized the adjacency map
+        A_tilde = torch.sigmoid(self.P_hat_symm) * self.sub_adj.cuda() #+ torch.eye(self.num_nodes).cuda()
 
         D_tilde = get_degree_matrix(A_tilde).detach()  # Don't need gradient of this
         # Raise to power -1/2, set all infs to 0s
@@ -163,13 +161,14 @@ class GCNSyntheticPerturb(nn.Module):
     def forward_prediction(self, x, logits=True):
         # Same as forward but uses P instead of P_hat ==> non-differentiable
         # but needed for actual predictions
-
-        self.P = (torch.sigmoid(self.P_hat_symm) >= 0.5).float()  # threshold P_hat
-
-        if self.edge_addition:
-            A_tilde = self.P + torch.eye(self.num_nodes).cuda()
+        if self.PN_PP == "PP":
+            self.P = (torch.sigmoid(self.P_hat_symm) < 0.5).float()  # threshold P_hat
         else:
-            A_tilde = self.P * self.adj + torch.eye(self.num_nodes).cuda()
+            self.P = (torch.sigmoid(self.P_hat_symm) >= 0.5).float()
+            # threshold P_hat
+
+        # no need for self loop since we normalized the adjacency map
+        A_tilde = self.P * self.adj #+ torch.eye(self.num_nodes).cuda()
 
         D_tilde = get_degree_matrix(A_tilde)
         # Raise to power -1/2, set all infs to 0s
@@ -197,12 +196,9 @@ class GCNSyntheticPerturb(nn.Module):
         A_tilde = torch.FloatTensor(self.num_nodes, self.num_nodes)
         A_tilde.requires_grad = True
 
-        if self.edge_addition:  # Learn new adj matrix directly
-            A_tilde = torch.sigmoid(self.P_hat_symm) + torch.eye(self.num_nodes).cuda()
-            # Use sigmoid to bound P_hat in [0,1]
-        else:  # Learn P_hat that gets multiplied element-wise with adj -- only edge deletions
-            A_tilde = torch.sigmoid(self.P_hat_symm) * self.sub_adj.cuda() + torch.eye(
-                self.num_nodes).cuda()  # Use sigmoid to bound P_hat in [0,1]
+        # Learn P_hat that gets multiplied element-wise with adj -- only edge deletions
+        A_tilde = torch.sigmoid(self.P_hat_symm) * self.sub_adj.cuda()
+        # + torch.eye(self.num_nodes).cuda()  # Use sigmoid to bound P_hat in [0,1]
 
         D_tilde = get_degree_matrix(A_tilde).detach()  # Don't need gradient of this
         # Raise to power -1/2, set all infs to 0s
@@ -223,12 +219,12 @@ class GCNSyntheticPerturb(nn.Module):
     def encode_prediction(self, x):
         # Same as forward but uses P instead of P_hat ==> non-differentiable
         # but needed for actual predictions
-
-        self.P = (torch.sigmoid(self.P_hat_symm) >= 0).float()  # threshold P_hat
-        if self.edge_addition:
-            A_tilde = self.P + torch.eye(self.num_nodes).cuda()
+        if self.PN_PP == "PP":
+            self.P = (torch.sigmoid(self.P_hat_symm) < 0.5).float()  # threshold P_hat
         else:
-            A_tilde = self.P * self.adj + torch.eye(self.num_nodes).cuda()
+            self.P = (torch.sigmoid(self.P_hat_symm) >= 0.5).float()  # threshold P_hat
+
+        A_tilde = self.P * self.adj #+ torch.eye(self.num_nodes).cuda()
 
         D_tilde = get_degree_matrix(A_tilde)
         # Raise to power -1/2, set all infs to 0s
@@ -275,78 +271,3 @@ class GCNSyntheticPerturb(nn.Module):
         L2 = self.__L2__()
         loss_total = loss_perturb + dist*self.beta*loss_graph_dist + l1*self.psi*L1 + l2*L2 + ae*self.gamma*l2_AE
         return loss_total, loss_perturb, loss_graph_dist, L1.item(), L2.item(), l2_AE.item(), cf_adj
-
-
-
-
-
-    def loss_PN_L1_L2(self, output, y_orig_onehot):
-
-        loss_perturb = pertinent_negative_loss(output, y_orig_onehot, self.const, self.kappa)
-        cf_adj = self.P * self.adj
-        cf_adj.requires_grad = True  # Need to change this otherwise loss_graph_dist has no gradient
-        loss_graph_dist = torch.dist(cf_adj , self.adj.cuda(), p=1) / 2
-        L1 = torch.linalg.norm(self.P_hat_symm, ord=1)
-        L2 = torch.linalg.norm(self.P_hat_symm, ord=2)
-        loss_total = loss_perturb + self.beta * loss_graph_dist + self.psi*L1 + L2
-        return loss_total, loss_perturb, loss_graph_dist, L1.item(), L2.item(), torch.inf, cf_adj
-
-    def loss_PN(self, output, y_orig_onehot):
-
-        loss_perturb = pertinent_negative_loss(output, y_orig_onehot, self.const, self.kappa)
-        cf_adj = self.P * self.adj
-        cf_adj.requires_grad = True  # Need to change this otherwise loss_graph_dist has no gradient
-        loss_graph_dist = torch.dist(cf_adj , self.adj.cuda(), p=1) / 2
-        L1 = torch.linalg.norm(self.P_hat_symm, ord=1)
-        L2 = torch.linalg.norm(self.P_hat_symm, ord=2)
-        loss_total = loss_perturb
-        return loss_total, loss_perturb, loss_graph_dist, L1.item(), L2.item(), torch.inf, cf_adj
-
-    def loss_PN_dist(self, output, y_orig_onehot):
-
-        loss_perturb = pertinent_negative_loss(output, y_orig_onehot, self.const, self.kappa)
-        cf_adj = self.P * self.adj
-        cf_adj.requires_grad = True  # Need to change this otherwise loss_graph_dist has no gradient
-        loss_graph_dist = torch.dist(cf_adj , self.adj.cuda(), p=1) / 2
-        L1 = torch.linalg.norm(self.P_hat_symm, ord=1)
-        L2 = torch.linalg.norm(self.P_hat_symm, ord=2)
-        loss_total = loss_perturb + self.beta * loss_graph_dist
-        return loss_total, loss_perturb, loss_graph_dist, L1.item(), L2.item(), torch.inf, cf_adj
-
-    def loss_PN_AE_L1_L2(self, graph_AE, x, output, y_orig_onehot):
-
-        loss_perturb = pertinent_negative_loss(output, y_orig_onehot, self.const, self.kappa)
-        cf_adj = self.P * self.adj
-        cf_adj.requires_grad = True  # Need to change this otherwise loss_graph_dist has no gradient
-        cf_adj_sparse = dense_to_sparse(cf_adj)[0]
-        reconst_P = (torch.sigmoid(graph_AE.forward(x, cf_adj_sparse)) >= self.AE_threshold).float()
-        l2_AE = torch.dist(cf_adj, reconst_P, p=2)
-        loss_graph_dist = torch.dist(cf_adj, self.adj.cuda(), p=1) / 2
-        L1 = torch.linalg.norm(self.P_hat_symm, ord=1)
-        L2 = torch.linalg.norm(self.P_hat_symm, ord=2)
-        loss_total = loss_perturb + self.psi*L1 + L2 + self.gamma*l2_AE
-        return loss_total, loss_perturb, loss_graph_dist, L1.item(), L2.item(), l2_AE.item(), cf_adj
-
-    def loss_PN_AE_L1_L2_dist(self, graph_AE, x, output, y_orig_onehot):
-        loss_perturb = pertinent_negative_loss(output, y_orig_onehot, self.const, self.kappa)
-        cf_adj = self.P * self.adj
-        cf_adj.requires_grad = True  # Need to change this otherwise loss_graph_dist has no gradient
-        cf_adj_sparse = dense_to_sparse(cf_adj)[0]
-        reconst_P = (torch.sigmoid(graph_AE.forward(x, cf_adj_sparse)) >= self.AE_threshold).float()
-        l2_AE = torch.dist(cf_adj, reconst_P, p=2)
-        loss_graph_dist = torch.dist(cf_adj, self.adj.cuda(), p=1) / 2
-        L1 = torch.linalg.norm(self.P_hat_symm, ord=1)
-        L2 = torch.linalg.norm(self.P_hat_symm, ord=2)
-        loss_total = loss_perturb + self.beta * loss_graph_dist + self.psi*L1 + L2 + self.gamma*l2_AE
-        return loss_total, loss_perturb, loss_graph_dist, L1.item(), L2.item(), l2_AE.item(), cf_adj
-
-    def loss_PN_AE_(self, graph_AE, x, output, y_orig_onehot):
-        loss_perturb = pertinent_negative_loss(output, y_orig_onehot, self.const, self.kappa)
-        cf_adj = self.P * self.adj
-        cf_adj.requires_grad = True  # Need to change this otherwise loss_graph_dist has no gradient
-        cf_adj_sparse = dense_to_sparse(cf_adj)[0]
-        reconst_P = (torch.sigmoid(graph_AE.forward(x, cf_adj_sparse)) >= self.AE_threshold).float()
-        l2_AE = torch.dist(reconst_P, cf_adj)/2
-        loss_graph_dist = torch.dist(cf_adj, self.adj.cuda(), p=1) / 2
-        loss_total = loss_perturb + self.gamma*l2_AE #+ self.beta * loss_graph_dist+ self.gamma*l2_AE
-        return loss_total, loss_perturb, loss_graph_dist, torch.inf, torch.inf, l2_AE.item(), cf_adj

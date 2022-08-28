@@ -3,93 +3,161 @@ from torch_geometric.utils import dense_to_sparse
 import pandas as pd
 import numpy as np
 from utils import normalize_adj
+from visualization import plot_graph, plot_centrality
+from evaluation.evaluation_metrics import gen_graph, graph_evaluation_metrics, centrality
 import networkx as nx
 
 torch.manual_seed(0)
 np.random.seed(0)
 
 
-def graph_evaluation_metrics(model, sub_feat, sub_adj, cf_examples, g, cf_g, name='', device='cuda'):
-
-    b = model.forward(sub_feat, normalize_adj(sub_adj, device), logit=False)
-    res = []
-    for i in range(len(cf_examples)):
-        cf_adj = torch.from_numpy(cf_examples[i][2]).cuda()
-        a = model.forward(sub_feat, normalize_adj(cf_adj, device), logit=False)
-        f = (a.argmax(dim=1) == b.argmax(dim=1)).sum() / a.__len__()
-        f = f.cpu().numpy()
-        s = (cf_adj <sub_adj).sum()/ sub_adj.sum()
-        s = s.cpu().numpy()
-        l = torch.linalg.norm(cf_adj, ord=1)
-        l = l.cpu().numpy()
-        lpur = cf_examples[i][11]
-        lgd = cf_examples[i][12]
-        l1 = cf_examples[i][13]
-        l2 = cf_examples[i][14]
-        ae = cf_examples[i][15]
-        res.append([f, s, l, lpur, lgd, l1, l2, ae])
-
-    df = pd.DataFrame(
-        res,
-        columns=[
-            'fidelity', 'sparsity',
-            'l1_norm', 'loss_perturb',
-            'loss_dist', 'l1_p_hat',
-            'l2_p_hat', 'ae_dist',
-        ]
+def evaluate_cf_PN(explainer_args, model, sub_feat, sub_adj, sub_labels, sub_edge_index, new_idx, i, cf_example):
+    plotting_graph = plot_graph(
+        sub_adj.cpu().numpy(),
+        new_idx,
+        f'{explainer_args.graph_result_dir}/'
+        f'{explainer_args.dataset_str}/'
+        f'cf_expl_{explainer_args.cf_expl}/'
+        f'pn_pp_{explainer_args.PN_PP}/'
+        f'{explainer_args.algorithm}/'
+        f'_{i}_sub_adj_{explainer_args.graph_result_name}.png'
     )
-    df.to_csv(f'{name}.csv', index=False)
+    plotting_graph.plot_org_graph(
+        sub_adj.cpu().numpy(),
+        sub_labels.cpu().numpy(),
+        new_idx,
+        f'{explainer_args.graph_result_dir}/'
+        f'{explainer_args.dataset_str}/'
+        f'cf_expl_{explainer_args.cf_expl}/'
+        f'pn_pp_{explainer_args.PN_PP}/'
+        f'{explainer_args.algorithm}/'
+        f'_{i}_sub_adj_{explainer_args.graph_result_name}.png',
+        sub_edge_index.t().cpu().numpy()
+    )
+
+    nodes = list(range(sub_adj.shape[0]))
+    g = gen_graph(nodes, sub_edge_index.cpu().t().numpy())
+    cen = centrality(g)
+    for j, x in enumerate(cf_example):
+
+        cf_sub_adj = x[2]
+        if cf_sub_adj.sum() < sub_adj.sum():
+            del_edge_adj = 1 * (cf_sub_adj < sub_adj.cpu().numpy())
+            plotting_graph.plot_cf_graph(
+                cf_sub_adj,
+                del_edge_adj,
+                x[8].numpy(),
+                new_idx,
+                f'{explainer_args.graph_result_dir}/'
+                f'{explainer_args.dataset_str}/'
+                f'cf_expl_{explainer_args.cf_expl}/'
+                f'pn_pp_{explainer_args.PN_PP}/'
+                f'{explainer_args.algorithm}/'
+                f'_{i}_counter_factual_{j}_'
+                f'_epoch_{x[3]}_'
+                f'{explainer_args.graph_result_name}__removed_edges__.png',
+            )
+            cf_edge_index = dense_to_sparse(torch.tensor(cf_sub_adj))[0].t().cpu().numpy()
+            cf_nodes = list(range(cf_sub_adj.shape[0]))
+            cf_g = gen_graph(cf_nodes, cf_edge_index)
+            cf_cen = centrality(cf_g)
+            plot_centrality(
+                cen, cf_cen,
+                f'{explainer_args.graph_result_dir}/'
+                f'{explainer_args.dataset_str}/'
+                f'cf_expl_{explainer_args.cf_expl}/'
+                f'pn_pp_{explainer_args.PN_PP}/'
+                f'{explainer_args.algorithm}/'
+                f'_{i}_counter_factual_{j}_'
+                f'_epoch_{x[3]}_'
+                f'{explainer_args.graph_result_name}__centrality__'
+            )
+    graph_evaluation_metrics(
+        model,
+        sub_feat,
+        sub_adj,
+        cf_example,
+        g,
+        cf_g,
+        f'{explainer_args.graph_result_dir}/'
+        f'{explainer_args.dataset_str}/'
+        f'cf_expl_{explainer_args.cf_expl}/'
+        f'pn_pp_{explainer_args.PN_PP}/'
+        f'{explainer_args.algorithm}/'
+        f'_{i}_counter_factual_{explainer_args.graph_result_name}_sub_graph_'
+    )
 
 
-def insertion(model, features, cf_example, removed_edges, labels, node_idx, device='cuda', name='name'):
-    size = [0.1, 0.3, 0.5, 0.7, 0.9, 1]
-    a = dense_to_sparse(torch.tensor(removed_edges))[0].t().cpu().numpy()
-    p_c = []
-    for s in size:
-        copy_cf_example = cf_example.copy()
-        b = np.random.choice(len(a), size=int(s*len(a)), replace=False)
-        add_idx = a[b]
-        for x in add_idx:
-            copy_cf_example[x[0]][x[1]] = 1
-            copy_cf_example[x[1]][x[0]] = 1
+def evaluate_cf_PP(explainer_args, model, sub_feat, sub_adj, sub_labels, sub_edge_index, new_idx, i, cf_example):
+    plotting_graph = plot_graph(
+        sub_adj.cpu().numpy(),
+        new_idx,
+        f'{explainer_args.graph_result_dir}/'
+        f'{explainer_args.dataset_str}/'
+        f'cf_expl_{explainer_args.cf_expl}/'
+        f'pn_pp_{explainer_args.PN_PP}/'
+        f'{explainer_args.algorithm}/'
+        f'_{i}_sub_adj_{explainer_args.graph_result_name}.png'
+    )
+    plotting_graph.plot_org_graph(
+        sub_adj.cpu().numpy(),
+        sub_labels.cpu().numpy(),
+        new_idx,
+        f'{explainer_args.graph_result_dir}/'
+        f'{explainer_args.dataset_str}/'
+        f'cf_expl_{explainer_args.cf_expl}/'
+        f'pn_pp_{explainer_args.PN_PP}/'
+        f'{explainer_args.algorithm}/'
+        f'_{i}_sub_adj_{explainer_args.graph_result_name}.png',
+        sub_edge_index.t().cpu().numpy()
+    )
 
-        ins_labels = model(
-            features, normalize_adj(torch.tensor(copy_cf_example).cuda(), device)
-        ).argmax(dim=1).cpu().numpy()
-        changed = ins_labels != labels
-        percent = (1*changed).sum()/len(labels)
-        node_label_change = changed[node_idx]
-        print(f"the percentage of changed labels:{percent}")
-        print(f"Node label changed:{node_label_change}")
-        p_c.append([percent, node_label_change])
-    df = pd.DataFrame(p_c,
-                      columns=['Percent', 'changed'])
-    df.to_csv(f'{name}.csv', index=False)
-    return percent
+    nodes = list(range(sub_adj.shape[0]))
+    g = gen_graph(nodes, sub_edge_index.cpu().t().numpy())
+    cen = centrality(g)
+    for j, x in enumerate(cf_example):
 
-
-def deletion(model, features, sub_adj, removed_edges, labels, node_idx, device='cuda', name=''):
-    size = [0.1, 0.3, 0.5, 0.7, 0.9, 1]
-    p_c = []
-    a = dense_to_sparse(torch.tensor(removed_edges))[0].t().cpu().numpy()
-    for s in size:
-        copy_cf_example = sub_adj.copy()
-        b = np.random.choice(len(a), size=int(s*len(a)), replace=False)
-        add_idx = a[b]
-        for x in add_idx:
-            copy_cf_example[x[0]][x[1]] = 0
-            copy_cf_example[x[1]][x[0]] = 0
-
-        del_labels = model(features, normalize_adj(torch.tensor(copy_cf_example).cuda(), device)).argmax(dim=1).cpu().numpy()
-        changed = del_labels != labels
-        percent = (1*changed).sum()/len(labels)
-        node_label_change = changed[node_idx]
-        print(f"Deletion: Percentage of changed labels:{percent}")
-        print(f"Deletion: Node label changed:{node_label_change}")
-        p_c.append([percent, node_label_change])
-    df = pd.DataFrame(p_c,
-                      columns=['Percent', 'changed'])
-    df.to_csv(f'{name}.csv', index=False)
-    return percent
-
-
+        cf_sub_adj = x[2]
+        if cf_sub_adj.sum() > 0:
+            plotting_graph.plot_org_graph(
+                cf_sub_adj,
+                x[8].numpy(),
+                new_idx,
+                f'{explainer_args.graph_result_dir}/'
+                f'{explainer_args.dataset_str}/'
+                f'cf_expl_{explainer_args.cf_expl}/'
+                f'pn_pp_{explainer_args.PN_PP}/'
+                f'{explainer_args.algorithm}/'
+                f'_{i}_counter_factual_{j}_'
+                f'_epoch_{x[3]}_'
+                f'{explainer_args.graph_result_name}__removed_edges__.png',
+            )
+            cf_edge_index = dense_to_sparse(torch.tensor(cf_sub_adj))[0].t().cpu().numpy()
+            cf_nodes = list(range(cf_sub_adj.shape[0]))
+            cf_g = gen_graph(cf_nodes, cf_edge_index)
+            cf_cen = centrality(cf_g)
+            plot_centrality(
+                cen, cf_cen,
+                f'{explainer_args.graph_result_dir}/'
+                f'{explainer_args.dataset_str}/'
+                f'cf_expl_{explainer_args.cf_expl}/'
+                f'pn_pp_{explainer_args.PN_PP}/'
+                f'{explainer_args.algorithm}/'
+                f'_{i}_counter_factual_{j}_'
+                f'_epoch_{x[3]}_'
+                f'{explainer_args.graph_result_name}__centrality__'
+            )
+    graph_evaluation_metrics(
+        model,
+        sub_feat,
+        sub_adj,
+        cf_example,
+        g,
+        cf_g,
+        f'{explainer_args.graph_result_dir}/'
+        f'{explainer_args.dataset_str}/'
+        f'cf_expl_{explainer_args.cf_expl}/'
+        f'pn_pp_{explainer_args.PN_PP}/'
+        f'{explainer_args.algorithm}/'
+        f'_{i}_counter_factual_{explainer_args.graph_result_name}_sub_graph_'
+    )

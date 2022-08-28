@@ -12,9 +12,9 @@ from model import GCN, train
 from cf_explainer import CFExplainer
 from gae.GAE import gae
 from visualization import plot_graph, plot_centrality
-from evaluation.evaluation import graph_evaluation_metrics, insertion, deletion
-from evaluation.evaluation_metrics import gen_graph, centrality, clustering
+from evaluation.evaluation import evaluate_cf_PN, evaluate_cf_PP
 from torch_geometric.utils import dense_to_sparse
+
 torch.manual_seed(0)
 np.random.seed(0)
 
@@ -91,10 +91,6 @@ def main(gae_args, explainer_args):
                 print(f"Output original model, normalized - actual label: {data['labels'][i]}")
                 print(f"Output original model, full adj: {output[i].argmax()}")
                 print(
-                    f"Output original model, normalized - sub adj: "
-                    f"{model(sub_feat, normalize_adj(sub_adj, explainer_args.device))[new_idx].argmax()}"
-                )
-                print(
                     f"Output original model, not normalized - sub adj: {sub_output[new_idx]}"
                 )
             # Need to instantitate new cf model every time because size of P changes based on size of sub_adj
@@ -132,81 +128,12 @@ def main(gae_args, explainer_args):
                 f'_{i}_loss_.png'
             )
             test_cf_examples.append(cf_example)
-            plotting_graph = plot_graph(
-                sub_adj.cpu().numpy(),
-                new_idx,
-                f'{explainer_args.graph_result_dir}/'
-                f'{explainer_args.dataset_str}/'
-                f'cf_expl_{explainer_args.cf_expl}/'
-                f'pn_pp_{explainer_args.PN_PP}/'
-                f'{explainer_args.algorithm}/'
-                f'_{i}_sub_adj_{explainer_args.graph_result_name}.png'
-            )
-            plotting_graph.org_plot_graph(
-                sub_adj.cpu().numpy(),
-                sub_labels.cpu().numpy(),
-                new_idx,
-                f'{explainer_args.graph_result_dir}/'
-                f'{explainer_args.dataset_str}/'
-                f'cf_expl_{explainer_args.cf_expl}/'
-                f'pn_pp_{explainer_args.PN_PP}/'
-                f'{explainer_args.algorithm}/'
-                f'_{i}_sub_adj_{explainer_args.graph_result_name}.png',
-                sub_edge_index.t().cpu().numpy()
-            )
-
-            nodes = list(range(sub_adj.shape[0]))
-            g = gen_graph(nodes, sub_edge_index.cpu().t().numpy())
-            cen = centrality(g)
-            for j, x in enumerate(cf_example):
-
-                cf_sub_adj = x[2]
-                if cf_sub_adj.sum()< sub_adj.sum():
-                    del_edge_adj = 1* (cf_sub_adj<sub_adj.cpu().numpy())
-                    plotting_graph.plot_cf_graph(
-                        cf_sub_adj,
-                        del_edge_adj,
-                        x[8].numpy(),
-                        new_idx,
-                        f'{explainer_args.graph_result_dir}/'
-                        f'{explainer_args.dataset_str}/'
-                        f'cf_expl_{explainer_args.cf_expl}/'
-                        f'pn_pp_{explainer_args.PN_PP}/'
-                        f'{explainer_args.algorithm}/'
-                        f'_{i}_counter_factual_{j}_'
-                        f'_epoch_{x[3]}_'
-                        f'{explainer_args.graph_result_name}__removed_edges__.png',
-                    )
-                    cf_edge_index = dense_to_sparse(torch.tensor(cf_sub_adj))[0].t().cpu().numpy()
-                    cf_nodes = list(range(cf_sub_adj.shape[0]))
-                    cf_g = gen_graph(cf_nodes, cf_edge_index)
-                    cf_cen = centrality(cf_g)
-                    plot_centrality(
-                        cen, cf_cen,
-                        f'{explainer_args.graph_result_dir}/'
-                        f'{explainer_args.dataset_str}/'
-                        f'cf_expl_{explainer_args.cf_expl}/'
-                        f'pn_pp_{explainer_args.PN_PP}/'
-                        f'{explainer_args.algorithm}/'
-                        f'_{i}_counter_factual_{j}_'
-                        f'_epoch_{x[3]}_'
-                        f'{explainer_args.graph_result_name}__centrality__'
-                    )
-            graph_evaluation_metrics(
-                model,
-                sub_feat,
-                sub_adj,
-                cf_example,
-                g,
-                cf_g,
-                f'{explainer_args.graph_result_dir}/'
-                f'{explainer_args.dataset_str}/'
-                f'cf_expl_{explainer_args.cf_expl}/'
-                f'pn_pp_{explainer_args.PN_PP}/'
-                f'{explainer_args.algorithm}/'
-                f'_{i}_counter_factual_{explainer_args.graph_result_name}_sub_graph_'
-            )
+            if explainer_args.PN_PP == "PN":
+                evaluate_cf_PN(explainer_args, model, sub_feat, sub_adj, sub_labels, sub_edge_index, new_idx, i, cf_example)
+            else:
+                evaluate_cf_PP(explainer_args, model, sub_feat, sub_adj, sub_labels, sub_edge_index, new_idx, i, cf_example)
             print('yes!')
+
             torch.cuda.empty_cache()
             gc.collect()
         except:
@@ -232,7 +159,7 @@ if __name__ == '__main__':
     parser.add_argument('--inputdim', type=int, default=10, help='Input dimension')
     parser.add_argument('--hidden', type=int, default=20, help='Number of units in hidden layer 1.')
     parser.add_argument('--n_layers', type=int, default=3, help='Number of units in hidden layer 1.')
-    parser.add_argument('--lr', type=float, default=0.005, help='Initial learning rate.')
+    parser.add_argument('--lr', type=float, default=0.009, help='Initial learning rate.')
     parser.add_argument('--cf_lr', type=float, default=0.009, help='CF-explainer learning rate.')
     parser.add_argument('--dropout', type=float, default=0.2, help='Dropout rate (1 - keep probability).')
     parser.add_argument('--cf_optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
@@ -247,7 +174,7 @@ if __name__ == '__main__':
     parser.add_argument('--cf_train_loss', type=str, default='loss_PN',
                         help='CF explainer loss function')
     parser.add_argument('--PN_PP', type=str, default="PP", help='CF explainer loss function')
-    parser.add_argument('--cf_expl', type=bool, default=False, help='CF explainer loss function')
+    parser.add_argument('--cf_expl', type=bool, default=True, help='CF explainer loss function')
     parser.add_argument('--n_momentum', type=float, default=0.5, help='Nesterov momentum')
     explainer_args = parser.parse_args()
 

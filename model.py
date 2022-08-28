@@ -55,7 +55,7 @@ def train(
     weights = compute_class_weight(class_weight='balanced', classes=np.unique(labels[train_mask].cpu().numpy()),
                                       y=labels[train_mask].cpu().numpy())
     weights = torch.FloatTensor(weights).cuda()
-    patience = 3
+    patience = 5
     trigger_times = 0
     prev_loss = np.inf
 
@@ -84,7 +84,7 @@ def train(
 
                 if trigger_times >= patience:
                     print('Early stopping!\nStart to test process.')
-                    return
+                    break
             else:
                 print('trigger times: 0')
                 trigger_times = 0
@@ -97,7 +97,7 @@ def train(
             # loss_tr_.append(loss_train.cpu().detach().numpy())
             # loss_val_.append(loss_val.cpu().detach().numpy())
             epochs_.append(i)
-            return model
+    return model
 
 
 def test(

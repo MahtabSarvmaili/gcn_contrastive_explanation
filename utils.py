@@ -123,6 +123,7 @@ def get_neighbourhood(node_idx, edge_index, n_hops, features, labels, hard_edge_
     edge_subset_relabel = subgraph(edge_subset[0], edge_index, relabel_nodes=True)  # Get relabelled subset of edges
     assert edge_subset[0].shape[0] > 2, "Number of nodes involved in the subgraph is less than 2"
     sub_adj = to_dense_adj(edge_subset_relabel[0]).squeeze()
+    sub_adj = normalize_adj(sub_adj, 'cuda' if torch.cuda.is_available() else 'cpu')
     sub_feat = features[edge_subset[0], :]
     sub_labels = labels[edge_subset[0]]
     new_index = np.array([i for i in range(len(edge_subset[0]))])

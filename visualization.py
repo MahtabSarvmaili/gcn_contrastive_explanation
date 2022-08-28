@@ -71,7 +71,6 @@ class plot_graph:
             return
         edge_list = [(i[0], i[1]) for i in edge_index]
 
-        plt.close()
         self.G = nx.Graph()
         self.G.add_nodes_from(range(self.n_nodes))
         self.G.add_edges_from(edge_list)
@@ -83,8 +82,51 @@ class plot_graph:
                 break
         plt.close()
 
-    def org_plot_graph(self, adj, labels, node_idx, name, org_edge_idx=None, plot_grey_edges=True):
+    def __plot_graph__(
+            self, max_label, label2nodes, node_idx, labels,
+            pos_edges, removed_edges_list=None, removed_edge_index=None, name=''
+    ):
         plt.close()
+        for i in range(max_label):
+            node_filter = []
+            for j in range(len(label2nodes[i])):
+                if label2nodes[i][j] in self.G.nodes():
+                    node_filter.append(label2nodes[i][j])
+            nx.draw_networkx_nodes(self.G, self.pos,
+                                   nodelist=node_filter,
+                                   node_color=colors[i % len(colors)],
+                                   node_size=20, label=str(i))
+
+        nx.draw_networkx_nodes(self.G, self.pos,
+                               nodelist=[node_idx],
+                               node_color='yellow',
+                               node_size=50, node_shape='s', label=str(labels[node_idx]))
+
+        nx.draw_networkx_edges(self.G, self.pos, width=1, alpha=1, edge_color='grey', style=':')
+
+        nx.draw_networkx_edges(self.G, self.pos,
+                               edgelist=pos_edges,
+                               width=1, alpha=1)
+
+        if removed_edges_list is not None:
+            removed_nodes = set(removed_edge_index.reshape(-1))
+            nx.draw_networkx_nodes(self.G, self.pos,
+                                   nodelist=removed_nodes,
+                                   node_color='red',
+                                   node_size=20)
+            nx.draw_networkx_edges(self.G, self.pos,
+                                   edgelist=removed_edges_list,
+                                   width=1, alpha=0.8, edge_color='red', style='-')
+        ax = plt.gca()
+        ax.margins(0.11)
+        plt.tight_layout()
+        plt.legend()
+        plt.title(name)
+        plt.axis("off")
+        plt.savefig(name)
+        plt.close()
+
+    def plot_org_graph(self, adj, labels, node_idx, name, org_edge_idx=None, plot_grey_edges=True):
         edge_index = dense_to_sparse(torch.tensor(adj))[0].t().cpu().numpy()
         if len(edge_index) == 0:
             print(f'{name} No edge exist -> The adjacency matrix is not valid')
@@ -102,38 +144,9 @@ class plot_graph:
         for i in range(nmb_nodes):
             label2nodes[labels[i]].append(i)
 
-        for i in range(max_label):
-            node_filter = []
-            for j in range(len(label2nodes[i])):
-                if label2nodes[i][j] in self.G.nodes():
-                    node_filter.append(label2nodes[i][j])
-            nx.draw_networkx_nodes(self.G, self.pos,
-                                   nodelist=node_filter,
-                                   node_color=colors[i % len(colors)],
-                                   node_size=20, label=str(i))
-
-        nx.draw_networkx_nodes(self.G, self.pos,
-                               nodelist=[node_idx],
-                               node_color='yellow',
-                               node_size=50, node_shape='s', label=str(labels[node_idx]))
-
-        if plot_grey_edges:
-            nx.draw_networkx_edges(self.G, self.pos, width=1, alpha=1, edge_color='grey', style=':')
-
-        nx.draw_networkx_edges(self.G, self.pos,
-                               edgelist=pos_edges,
-                               width=1, alpha=1)
-        ax = plt.gca()
-        ax.margins(0.11)
-        plt.tight_layout()
-        plt.legend()
-        plt.title(name)
-        plt.axis("off")
-        plt.savefig(name)
-        plt.close()
+        self.__plot_graph__(max_label, label2nodes, node_idx, labels, pos_edges, name=name)
 
     def plot_cf_graph(self, adj, sub_adj, labels, node_idx, name):
-        plt.close()
         edge_index = dense_to_sparse(torch.tensor(adj))[0].t().cpu().numpy()
         removed_edge_index = dense_to_sparse(torch.tensor(sub_adj))[0].t().cpu().numpy()
         nodes = np.unique(edge_index.flatten())
@@ -154,43 +167,9 @@ class plot_graph:
         # only plotting the edges and neighboring nodes of the node_idx
         pos_edges = [(u, v) for (u, v) in a if (u, v)]
         # explicitly set positions
-        for i in range(max_label):
-            node_filter = []
-            for j in range(len(label2nodes[i])):
-                if label2nodes[i][j] in self.G.nodes():
-                    node_filter.append(label2nodes[i][j])
-            nx.draw_networkx_nodes(self.G, self.pos,
-                                   nodelist=node_filter,
-                                   node_color=colors[i % len(colors)],
-                                   node_size=20, label=str(i))
-
-        nx.draw_networkx_nodes(self.G, self.pos,
-                               nodelist=[node_idx],
-                               node_color='yellow',
-                               node_size=50, node_shape='s', label=str(labels[node_idx]))
-
-        nx.draw_networkx_edges(self.G, self.pos, width=1, alpha=1, edge_color='grey', style=':')
-        nx.draw_networkx_edges(self.G, self.pos,
-                               edgelist=pos_edges,
-                               width=1, alpha=1)
-        if len(removed_edges_list) != 0:
-            removed_nodes = set(removed_edge_index.reshape(-1))
-            nx.draw_networkx_nodes(self.G, self.pos,
-                                   nodelist=removed_nodes,
-                                   node_color='red',
-                                   node_size=20)
-            nx.draw_networkx_edges(self.G, self.pos,
-                                   edgelist=removed_edges_list,
-                                   width=1, alpha=0.8, edge_color='red', style='-')
-
-        ax = plt.gca()
-        ax.margins(0.11)
-        plt.tight_layout()
-        plt.legend()
-        plt.title(name)
-        plt.axis("off")
-        plt.savefig(name)
-        plt.close()
+        self.__plot_graph__(
+            max_label, label2nodes, node_idx, labels, pos_edges, removed_edges_list, removed_edge_index, name
+        )
 
 
 def plot_errors(losses, path):

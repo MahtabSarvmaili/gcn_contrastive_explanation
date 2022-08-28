@@ -1,3 +1,4 @@
+import copy
 import os
 import torch
 import torch.nn.functional as F
@@ -29,7 +30,7 @@ class CFExplainer:
         self.model.eval()
         self.graph_AE = graph_ae
         self.graph_AE.eval()
-        self.sub_adj = sub_adj
+        self.sub_adj = copy.deepcopy(sub_adj)
         self.sub_feat = sub_feat
         self.n_hid = n_hid
         self.dropout = dropout
@@ -180,17 +181,11 @@ class CFExplainer:
         num_cf_examples = 0
         for epoch in range(num_epochs):
             new_example, loss_total = self.train_cf_model_pn(epoch)
-            if self.edge_addition:
-                if new_example != [] and loss_total <= best_loss:
-                    best_cf_example.append(new_example)
-                    best_loss = loss_total
-                    num_cf_examples += 1
-                    print(f'Epoch {epoch}, Num_cf_examples: {num_cf_examples}')
-            else:
-                if new_example != [] and loss_total <= best_loss:
-                    best_cf_example.append(new_example)
-                    num_cf_examples += 1
-                    best_loss = loss_total
-                    print(f'Epoch {epoch}, Num_cf_examples: {num_cf_examples}')
+            if new_example != [] and loss_total - best_loss <= 0.1:
+                best_cf_example.append(new_example)
+                best_loss = loss_total
+                num_cf_examples += 1
+                print(f'Epoch {epoch}, Num_cf_examples: {num_cf_examples}')
+
         plot_errors(self.losses, path)
         return best_cf_example

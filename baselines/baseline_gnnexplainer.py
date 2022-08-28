@@ -68,7 +68,7 @@ def main(explainer_args):
                     f'{explainer_args.algorithm}/'
                     f'_{i}_sub_adj_{explainer_args.graph_result_name}.png'
                 )
-                plotting_graph.org_plot_graph(
+                plotting_graph.plot_org_graph(
                     sub_adj.cpu().numpy(),
                     sub_labels.cpu().numpy(),
                     new_idx,
