@@ -103,19 +103,19 @@ def evaluate_cf_PP(explainer_args, model, sub_feat, sub_adj, sub_labels, sub_edg
         sub_adj.cpu().numpy(),
         sub_labels.cpu().numpy(),
         new_idx,
-        f'{explainer_args.graph_result_dir}/'
+        name=f'{explainer_args.graph_result_dir}/'
         f'{explainer_args.dataset_str}/'
         f'cf_expl_{explainer_args.cf_expl}/'
         f'pn_pp_{explainer_args.PN_PP}/'
         f'{explainer_args.algorithm}/'
         f'_{i}_sub_adj_{explainer_args.graph_result_name}.png',
-        sub_edge_index.t().cpu().numpy()
+        plot_grey_edges=True
     )
 
     nodes = list(range(sub_adj.shape[0]))
     g = gen_graph(nodes, sub_edge_index.cpu().t().numpy())
     cen = centrality(g)
-    for j, x in enumerate(cf_example):
+    for j, x in enumerate(cf_example[:10]):
 
         cf_sub_adj = x[2]
         if cf_sub_adj.sum() > 0:
@@ -128,36 +128,37 @@ def evaluate_cf_PP(explainer_args, model, sub_feat, sub_adj, sub_labels, sub_edg
                 f'cf_expl_{explainer_args.cf_expl}/'
                 f'pn_pp_{explainer_args.PN_PP}/'
                 f'{explainer_args.algorithm}/'
-                f'_{i}_counter_factual_{j}_'
+                f'_{i}_cf_PP_adj_{j}_'
                 f'_epoch_{x[3]}_'
-                f'{explainer_args.graph_result_name}__removed_edges__.png',
+                f'{explainer_args.graph_result_name}__.png',
+                plot_grey_edges=False
             )
-            cf_edge_index = dense_to_sparse(torch.tensor(cf_sub_adj))[0].t().cpu().numpy()
-            cf_nodes = list(range(cf_sub_adj.shape[0]))
-            cf_g = gen_graph(cf_nodes, cf_edge_index)
-            cf_cen = centrality(cf_g)
-            plot_centrality(
-                cen, cf_cen,
-                f'{explainer_args.graph_result_dir}/'
-                f'{explainer_args.dataset_str}/'
-                f'cf_expl_{explainer_args.cf_expl}/'
-                f'pn_pp_{explainer_args.PN_PP}/'
-                f'{explainer_args.algorithm}/'
-                f'_{i}_counter_factual_{j}_'
-                f'_epoch_{x[3]}_'
-                f'{explainer_args.graph_result_name}__centrality__'
-            )
-    graph_evaluation_metrics(
-        model,
-        sub_feat,
-        sub_adj,
-        cf_example,
-        g,
-        cf_g,
-        f'{explainer_args.graph_result_dir}/'
-        f'{explainer_args.dataset_str}/'
-        f'cf_expl_{explainer_args.cf_expl}/'
-        f'pn_pp_{explainer_args.PN_PP}/'
-        f'{explainer_args.algorithm}/'
-        f'_{i}_counter_factual_{explainer_args.graph_result_name}_sub_graph_'
-    )
+            # cf_edge_index = dense_to_sparse(torch.tensor(cf_sub_adj))[0].t().cpu().numpy()
+            # cf_nodes = list(range(cf_sub_adj.shape[0]))
+            # cf_g = gen_graph(cf_nodes, cf_edge_index)
+            # cf_cen = centrality(cf_g)
+            # plot_centrality(
+            #     cen, cf_cen,
+            #     f'{explainer_args.graph_result_dir}/'
+            #     f'{explainer_args.dataset_str}/'
+            #     f'cf_expl_{explainer_args.cf_expl}/'
+            #     f'pn_pp_{explainer_args.PN_PP}/'
+            #     f'{explainer_args.algorithm}/'
+            #     f'_{i}_counter_factual_{j}_'
+            #     f'_epoch_{x[3]}_'
+            #     f'{explainer_args.graph_result_name}__centrality__'
+            # )
+    # graph_evaluation_metrics(
+    #     model,
+    #     sub_feat,
+    #     sub_adj,
+    #     cf_example,
+    #     g,
+    #     cf_g,
+    #     f'{explainer_args.graph_result_dir}/'
+    #     f'{explainer_args.dataset_str}/'
+    #     f'cf_expl_{explainer_args.cf_expl}/'
+    #     f'pn_pp_{explainer_args.PN_PP}/'
+    #     f'{explainer_args.algorithm}/'
+    #     f'_{i}_counter_factual_{explainer_args.graph_result_name}_sub_graph_'
+    # )

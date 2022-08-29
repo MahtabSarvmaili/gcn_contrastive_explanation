@@ -181,11 +181,11 @@ class CFExplainer:
         num_cf_examples = 0
         for epoch in range(num_epochs):
             new_example, loss_total = self.train_cf_model_pn(epoch)
-            if new_example != [] and loss_total - best_loss <= 0.1:
+            if new_example != [] and loss_total <= best_loss:
                 best_cf_example.append(new_example)
                 best_loss = loss_total
                 num_cf_examples += 1
-                print(f'Epoch {epoch}, Num_cf_examples: {num_cf_examples}')
+                print(f'Epoch {epoch}, Num_cf_examples: {num_cf_examples}, Best Loss:{best_loss}')
 
         plot_errors(self.losses, path)
         return best_cf_example

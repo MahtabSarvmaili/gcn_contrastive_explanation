@@ -84,7 +84,7 @@ class plot_graph:
 
     def __plot_graph__(
             self, max_label, label2nodes, node_idx, labels,
-            pos_edges, removed_edges_list=None, removed_edge_index=None, name=''
+            pos_edges, edge_list=None, removed_edges_list=None, removed_edge_index=None, plot_all_edges=True, name=''
     ):
         plt.close()
         for i in range(max_label):
@@ -101,12 +101,15 @@ class plot_graph:
                                nodelist=[node_idx],
                                node_color='yellow',
                                node_size=50, node_shape='s', label=str(labels[node_idx]))
-
-        nx.draw_networkx_edges(self.G, self.pos, width=1, alpha=1, edge_color='grey', style=':')
+        if plot_all_edges:
+            nx.draw_networkx_edges(self.G, self.pos, width=1, alpha=1, edge_color='grey', style=':')
+        else:
+            nx.draw_networkx_edges(self.G, self.pos,edgelist=edge_list,
+                                   width=1, alpha=1, edge_color='grey', style=':')
 
         nx.draw_networkx_edges(self.G, self.pos,
                                edgelist=pos_edges,
-                               width=1, alpha=1)
+                               width=2, alpha=1, edge_color='black')
 
         if removed_edges_list is not None:
             removed_nodes = set(removed_edge_index.reshape(-1))
@@ -126,7 +129,7 @@ class plot_graph:
         plt.savefig(name)
         plt.close()
 
-    def plot_org_graph(self, adj, labels, node_idx, name, org_edge_idx=None, plot_grey_edges=True):
+    def plot_org_graph(self, adj, labels, node_idx, name, plot_grey_edges=True):
         edge_index = dense_to_sparse(torch.tensor(adj))[0].t().cpu().numpy()
         if len(edge_index) == 0:
             print(f'{name} No edge exist -> The adjacency matrix is not valid')
@@ -144,7 +147,7 @@ class plot_graph:
         for i in range(nmb_nodes):
             label2nodes[labels[i]].append(i)
 
-        self.__plot_graph__(max_label, label2nodes, node_idx, labels, pos_edges, name=name)
+        self.__plot_graph__(max_label, label2nodes, node_idx, labels, pos_edges, edge_list=edge_list, plot_all_edges=plot_grey_edges, name=name)
 
     def plot_cf_graph(self, adj, sub_adj, labels, node_idx, name):
         edge_index = dense_to_sparse(torch.tensor(adj))[0].t().cpu().numpy()
@@ -168,7 +171,7 @@ class plot_graph:
         pos_edges = [(u, v) for (u, v) in a if (u, v)]
         # explicitly set positions
         self.__plot_graph__(
-            max_label, label2nodes, node_idx, labels, pos_edges, removed_edges_list, removed_edge_index, name
+            max_label, label2nodes, node_idx, labels, pos_edges, removed_edges_list=removed_edges_list, removed_edge_index=removed_edge_index, name=name
         )
 
 

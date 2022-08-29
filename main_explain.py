@@ -169,9 +169,9 @@ if __name__ == '__main__':
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
     parser.add_argument('--edge-addition', type=bool, default=False, help='CF edge_addition')
     parser.add_argument('--graph_result_dir', type=str, default='./results', help='Result directory')
-    parser.add_argument('--algorithm', type=str, default='loss_PN', help='Result directory')
-    parser.add_argument('--graph_result_name', type=str, default='loss_PN', help='Result name')
-    parser.add_argument('--cf_train_loss', type=str, default='loss_PN',
+    parser.add_argument('--algorithm', type=str, default='loss_PN_L1_L2', help='Result directory')
+    parser.add_argument('--graph_result_name', type=str, default='loss_PN_L1_L2', help='Result name')
+    parser.add_argument('--cf_train_loss', type=str, default='loss_PN_L1_L2',
                         help='CF explainer loss function')
     parser.add_argument('--PN_PP', type=str, default="PP", help='CF explainer loss function')
     parser.add_argument('--cf_expl', type=bool, default=True, help='CF explainer loss function')

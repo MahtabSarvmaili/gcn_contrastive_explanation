@@ -161,10 +161,10 @@ class GCNSyntheticPerturb(nn.Module):
     def forward_prediction(self, x, logits=True):
         # Same as forward but uses P instead of P_hat ==> non-differentiable
         # but needed for actual predictions
-        if self.PN_PP == "PP":
-            self.P = (torch.sigmoid(self.P_hat_symm) < 0.5).float()  # threshold P_hat
-        else:
-            self.P = (torch.sigmoid(self.P_hat_symm) >= 0.5).float()
+        # if self.PN_PP == "PP":
+        #     self.P = (torch.sigmoid(self.P_hat_symm) < 0.5).float()  # threshold P_hat
+        # else:
+        self.P = (torch.sigmoid(self.P_hat_symm) >= 0.5).float()
             # threshold P_hat
 
         # no need for self loop since we normalized the adjacency map
@@ -219,10 +219,10 @@ class GCNSyntheticPerturb(nn.Module):
     def encode_prediction(self, x):
         # Same as forward but uses P instead of P_hat ==> non-differentiable
         # but needed for actual predictions
-        if self.PN_PP == "PP":
-            self.P = (torch.sigmoid(self.P_hat_symm) < 0.5).float()  # threshold P_hat
-        else:
-            self.P = (torch.sigmoid(self.P_hat_symm) >= 0.5).float()  # threshold P_hat
+        # if self.PN_PP == "PP":
+        #     self.P = (torch.sigmoid(self.P_hat_symm) < 0.5).float()  # threshold P_hat
+        # else:
+        self.P = (torch.sigmoid(self.P_hat_symm) >= 0.5).float()  # threshold P_hat
 
         A_tilde = self.P * self.adj #+ torch.eye(self.num_nodes).cuda()
 
