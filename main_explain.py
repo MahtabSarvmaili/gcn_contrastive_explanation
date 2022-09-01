@@ -35,9 +35,6 @@ def main(gae_args, explainer_args):
         'cora': 0.65,
         'citeseer': 0.6,
         'pubmed': 0.6,
-        'cornell':0.6,
-        'texas':0.6,
-        'CS': 0.6
     }
     model = GCN(
         nfeat=data['feat_dim'],
@@ -169,11 +166,11 @@ if __name__ == '__main__':
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
     parser.add_argument('--edge-addition', type=bool, default=False, help='CF edge_addition')
     parser.add_argument('--graph_result_dir', type=str, default='./results', help='Result directory')
-    parser.add_argument('--algorithm', type=str, default='loss_PN_L1_L2', help='Result directory')
-    parser.add_argument('--graph_result_name', type=str, default='loss_PN_L1_L2', help='Result name')
-    parser.add_argument('--cf_train_loss', type=str, default='loss_PN_L1_L2',
+    parser.add_argument('--algorithm', type=str, default='loss_PN', help='Result directory')
+    parser.add_argument('--graph_result_name', type=str, default='loss_PN_AE_L1_L2_dist', help='Result name')
+    parser.add_argument('--cf_train_loss', type=str, default='loss_PN_AE_L1_L2_dist',
                         help='CF explainer loss function')
-    parser.add_argument('--PN_PP', type=str, default="PP", help='CF explainer loss function')
+    parser.add_argument('--PN_PP', type=str, default="PN", help='CF explainer loss function')
     parser.add_argument('--cf_expl', type=bool, default=True, help='CF explainer loss function')
     parser.add_argument('--n_momentum', type=float, default=0.5, help='Nesterov momentum')
     explainer_args = parser.parse_args()

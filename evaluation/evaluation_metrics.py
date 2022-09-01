@@ -29,7 +29,7 @@ def clustering(graph:nx):
     return nx.clustering(graph)
 
 
-def graph_evaluation_metrics(model, sub_feat, sub_adj, cf_examples, g, cf_g, name='', device='cuda'):
+def graph_evaluation_metrics(model, sub_feat, sub_adj, cf_examples, name='', device='cuda'):
 
     b = model.forward(sub_feat, normalize_adj(sub_adj, device), logit=False)
     res = []

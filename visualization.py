@@ -117,6 +117,7 @@ class plot_graph:
                                    nodelist=removed_nodes,
                                    node_color='red',
                                    node_size=20)
+
             nx.draw_networkx_edges(self.G, self.pos,
                                    edgelist=removed_edges_list,
                                    width=1, alpha=0.8, edge_color='red', style='-')

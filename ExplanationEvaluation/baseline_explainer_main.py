@@ -114,7 +114,7 @@ def main():
         pgexplainer.prepare(idx_test)
         graph, expl = pgexplainer.explain(node_idx)
         node_feat_mask, edge_mask =gnnexplainer.explain_node(node_idx, train_dataset.x, train_dataset.edge_index)
-
+    edge_mask>0.5
 
 if __name__ == '__main__':
     main()
