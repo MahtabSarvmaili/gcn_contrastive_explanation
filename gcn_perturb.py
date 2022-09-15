@@ -31,6 +31,12 @@ def pertinent_positive_loss(output, y_orig_onehot, const, kappa):
     return loss_perturb
 
 
+def cross_loss(output, y):
+    cross_loss = torch.nn.CrossEntropyLoss()
+    closs = cross_loss(output, y)
+    return closs
+
+
 class GraphConvolutionPerturb(nn.Module):
 
     def __init__(self, in_features, out_features, bias=True):
@@ -64,7 +70,7 @@ class GCNSyntheticPerturb(nn.Module):
 
     def __init__(
             self, nfeat, nhid, nout, nclass, adj, dropout,
-            beta, gamma=0.01, kappa=10, psi=0.01, AE_threshold=0.5, PN_PP="PN", edge_addition=False, device='cuda'
+            beta, gamma=0.09, kappa=10, psi=0.01, AE_threshold=0.5, PN_PP="PN", cf_expl=True, edge_addition=False, device='cuda'
     ):
         super(GCNSyntheticPerturb, self).__init__()
         self.adj = adj
@@ -78,8 +84,9 @@ class GCNSyntheticPerturb(nn.Module):
         self.beta = torch.tensor(beta).cuda()
         self.const = torch.tensor(0.0, device=device)
         self.gamma = torch.tensor(gamma, device=device)
-        self.psi = torch.tensor(psi, device=device)
+        self.psi_l1 = torch.tensor(psi, device=device)
         self.PN_PP = PN_PP
+        self.cf_expl = cf_expl
         # P_hat needs to be symmetric ==>
         # learn vector representing entries in upper/lower triangular matrix and use to populate P_hat later
         self.P_vec_size = int((self.num_nodes * self.num_nodes - self.num_nodes) / 2) + self.num_nodes
@@ -259,6 +266,7 @@ class GCNSyntheticPerturb(nn.Module):
         return loss_total, loss_pred, loss_graph_dist, torch.inf, torch.inf, torch.inf, cf_adj
 
     def loss__(self, graph_AE, x, output, y_orig_onehot, l1=1, l2=1, ae=1, dist=1):
+        closs = 0
         if self.PN_PP == "PP":
             loss_perturb = pertinent_positive_loss(output, y_orig_onehot, self.const, self.kappa)
         else:
@@ -269,5 +277,7 @@ class GCNSyntheticPerturb(nn.Module):
         l2_AE = self.__AE_recons__(graph_AE, x, cf_adj)
         L1 = self.__L1__()
         L2 = self.__L2__()
-        loss_total = loss_perturb + dist*self.beta*loss_graph_dist + l1*self.psi*L1 + l2*L2 + ae*self.gamma*l2_AE
+        # if self.cf_expl is False:
+        #     closs = cross_loss(output.unsqueeze(dim=0), y_orig_onehot.argmax(keepdims=True))
+        loss_total = loss_perturb + dist * self.beta * loss_graph_dist + l1 * self.psi_l1 * L1 + l2 * L2 + ae * self.gamma * l2_AE + closs
         return loss_total, loss_perturb, loss_graph_dist, L1.item(), L2.item(), l2_AE.item(), cf_adj

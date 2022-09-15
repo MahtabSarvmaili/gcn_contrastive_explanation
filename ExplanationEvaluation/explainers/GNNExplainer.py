@@ -9,7 +9,7 @@ from torch_geometric.nn import MessagePassing
 from tqdm import tqdm
 
 from ExplanationEvaluation.explainers.BaseExplainer import BaseExplainer
-from ExplanationEvaluation.utils.graph import index_edge
+from ExplanationEvaluation.baseline_utils.graph import index_edge
 
 """
 This is an adaption of the GNNExplainer of the PyTorch-Lightning library. 

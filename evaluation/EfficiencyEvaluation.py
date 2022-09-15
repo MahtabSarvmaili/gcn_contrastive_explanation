@@ -1,6 +1,6 @@
 import time
 
-from ExplanationEvaluation.evaluation.BaseEvaluation import BaseEvaluation
+from evaluation.BaseEvaluation import BaseEvaluation
 
 
 class EfficiencyEvluation(BaseEvaluation):

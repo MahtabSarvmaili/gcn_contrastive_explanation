@@ -1,5 +1,5 @@
-from ExplanationEvaluation.evaluation.BaseEvaluation import BaseEvaluation
-from ExplanationEvaluation.evaluation.utils import evaluation_auc
+from evaluation.BaseEvaluation import BaseEvaluation
+from evaluation.evaluation_utils import evaluation_auc
 
 
 class AUCEvaluation(BaseEvaluation):

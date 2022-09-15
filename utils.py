@@ -117,13 +117,15 @@ def normalize_adj(adj, device):
     return norm_adj
 
 
-def get_neighbourhood(node_idx, edge_index, n_hops, features, labels, hard_edge_mask=False):
+def get_neighbourhood(node_idx, edge_index, n_hops, features, labels, device='cuda', hard_edge_mask=False):
 
     edge_subset = k_hop_subgraph(node_idx, n_hops, edge_index)  # Get all nodes involved
     edge_subset_relabel = subgraph(edge_subset[0], edge_index, relabel_nodes=True)  # Get relabelled subset of edges
     assert edge_subset[0].shape[0] > 2, "Number of nodes involved in the subgraph is less than 2"
     sub_adj = to_dense_adj(edge_subset_relabel[0]).squeeze()
-    sub_adj = normalize_adj(sub_adj, 'cuda' if torch.cuda.is_available() else 'cpu')
+    # we don't need to normalize the adjacency matrix for the explanation step,
+    # the adjacency will be normalized during the prediction procedure.
+    # sub_adj = normalize_adj(sub_adj, device)
     sub_feat = features[edge_subset[0], :]
     sub_labels = labels[edge_subset[0]]
     new_index = np.array([i for i in range(len(edge_subset[0]))])

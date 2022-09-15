@@ -1,4 +1,3 @@
-import time
 import json
 import os
 
@@ -8,12 +7,12 @@ from tqdm import tqdm
 
 from ExplanationEvaluation.datasets.dataset_loaders import load_dataset
 from ExplanationEvaluation.datasets.ground_truth_loaders import load_dataset_ground_truth
-from ExplanationEvaluation.evaluation.AUCEvaluation import AUCEvaluation
-from ExplanationEvaluation.evaluation.EfficiencyEvaluation import EfficiencyEvluation
+from evaluation.AUCEvaluation import AUCEvaluation
+from evaluation.EfficiencyEvaluation import EfficiencyEvluation
 from ExplanationEvaluation.explainers.GNNExplainer import GNNExplainer
 from ExplanationEvaluation.explainers.PGExplainer import PGExplainer
 from ExplanationEvaluation.models.model_selector import model_selector
-from ExplanationEvaluation.utils.plotting import plot
+from ExplanationEvaluation.baseline_utils.plotting import plot
 
 
 def get_classification_task(graphs):

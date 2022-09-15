@@ -49,7 +49,7 @@ class CFExplainer:
         self.cf_model = GCNSyntheticPerturb(
             self.sub_feat.shape[1], n_hid, n_hid,
             self.num_classes, self.sub_adj, dropout,
-            beta, AE_threshold=AE_threshold, PN_PP=PN_PP, edge_addition=edge_addition
+            beta, AE_threshold=AE_threshold, PN_PP=PN_PP, cf_expl=self.cf_expl, edge_addition=edge_addition
         )
 
         self.cf_model.load_state_dict(self.model.state_dict(), strict=False)
@@ -188,4 +188,6 @@ class CFExplainer:
                 print(f'Epoch {epoch}, Num_cf_examples: {num_cf_examples}, Best Loss:{best_loss}')
 
         plot_errors(self.losses, path)
+        for x in best_cf_example:
+            print(x[2].sum())
         return best_cf_example

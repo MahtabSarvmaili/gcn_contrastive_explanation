@@ -3,7 +3,7 @@ sys.path.append('../utils.py')
 from torch_geometric.nn import GCNConv, GNNExplainer, Linear
 from explainers.PGExplainer import PGExplainer
 import torch
-from utils.graph_utils import normalize_adj, get_neighbourhood
+from baseline_utils.graph_utils import normalize_adj, get_neighbourhood
 import numpy as np
 torch.manual_seed(0)
 np.random.seed(0)
