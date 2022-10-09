@@ -7,7 +7,7 @@ import torch
 import numpy as np
 from data.data_loader import load_data, load_synthetic, load_synthetic_AE, load_data_AE
 from data.gengraph import gen_syn1, gen_syn2, gen_syn3, gen_syn4
-from utils import normalize_adj, get_neighbourhood
+from utils import normalize_adj, get_neighbourhood, perturb_sub_adjacency
 from model import GCN, train
 from cf_explainer import CFExplainer
 from gae.GAE import gae
@@ -32,9 +32,9 @@ def main(gae_args, explainer_args):
         'gen_syn2': 0.65,
         'gen_syn3': 0.6,
         'gen_syn4': 0.62,
-        'cora': 0.65,
-        'citeseer': 0.6,
-        'pubmed': 0.6,
+        'cora': 0.5,
+        'citeseer': 0.5,
+        'pubmed': 0.5,
     }
     model = GCN(
         nfeat=data['feat_dim'],
@@ -77,7 +77,7 @@ def main(gae_args, explainer_args):
 
     idx_test = np.arange(0, data['n_nodes'])[data['test_mask'].cpu()]
     test_cf_examples = []
-    for i in idx_test[1:20]:
+    for i in idx_test[9:10]:
         try:
             sub_adj, sub_feat, sub_labels, node_dict, sub_edge_index = get_neighbourhood(
                 int(i), data['edge_index'],
@@ -127,11 +127,49 @@ def main(gae_args, explainer_args):
                 f'{explainer_args.algorithm}/'
                 f'_{i}_loss_.png'
             )
+            # stability evaluation + applying perturbation
+            # the choice of perturbation depends on the type of features
+            psub_adj_list = perturb_sub_adjacency(sub_adj.shape[0], sub_adj, [0.5, 0.4, 0.3, 0.2, 0.1])
+            psub_adj = psub_adj_list[-1] * sub_adj
+            explainer = CFExplainer(
+                model=model,
+                graph_ae=graph_ae,
+                sub_adj=psub_adj,
+                sub_feat=sub_feat,
+                n_hid=explainer_args.hidden,
+                dropout=explainer_args.dropout,
+                cf_optimizer=explainer_args.cf_optimizer,
+                lr=explainer_args.cf_lr,
+                n_momentum=explainer_args.n_momentum,
+                sub_labels=sub_labels,
+                y_pred_orig=sub_labels[new_idx],
+                num_classes=data['num_classes'],
+                beta=explainer_args.beta,
+                device=explainer_args.device,
+                AE_threshold=AE_threshold[explainer_args.dataset_str],
+                PN_PP=explainer_args.PN_PP,
+                cf_expl=explainer_args.cf_expl,
+                algorithm=explainer_args.algorithm,
+                edge_addition=explainer_args.edge_addition
+            )
+            explainer.cf_model.cuda()
+            pcf_example = explainer.explain(
+                node_idx=i,
+                new_idx=new_idx,
+                num_epochs=explainer_args.cf_epochs,
+                path=f'{explainer_args.graph_result_dir}/'
+                     f'{explainer_args.dataset_str}/'
+                     f'cf_expl_{explainer_args.cf_expl}/'
+                     f'pn_pp_{explainer_args.PN_PP}/'
+                     f'{explainer_args.algorithm}/'
+                     f'_{i}_loss_.png'
+            )
+
             test_cf_examples.append(cf_example)
             if explainer_args.PN_PP == "PN":
-                evaluate_cf_PN(explainer_args, model, sub_feat, sub_adj, sub_labels, sub_edge_index, new_idx, i, cf_example)
+                evaluate_cf_PN(explainer_args, model, sub_feat, sub_adj, sub_labels, sub_edge_index, new_idx, i, cf_example, pcf_example)
             else:
-                evaluate_cf_PP(explainer_args, model, sub_feat, sub_adj, sub_labels, sub_edge_index, new_idx, i, cf_example)
+                evaluate_cf_PP(explainer_args, model, sub_feat, sub_adj, sub_labels, sub_edge_index, new_idx, i, cf_example, pcf_example)
             print('yes!')
 
             torch.cuda.empty_cache()
@@ -149,7 +187,7 @@ if __name__ == '__main__':
     parser.add_argument('--hidden2', type=int, default=16, help='Number of units in hidden layer 2.')
     parser.add_argument('--lr', type=float, default=0.01, help='Initial learning rate.')
     parser.add_argument('--dropout', type=float, default=0.0, help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset_str', type=str, default='citeseer', help='type of dataset.')
+    parser.add_argument('--dataset_str', type=str, default='cora', help='type of dataset.')
     gae_args = parser.parse_args()
 
     parser = argparse.ArgumentParser()
@@ -163,7 +201,7 @@ if __name__ == '__main__':
     parser.add_argument('--cf_lr', type=float, default=0.009, help='CF-explainer learning rate.')
     parser.add_argument('--dropout', type=float, default=0.2, help='Dropout rate (1 - keep probability).')
     parser.add_argument('--cf_optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset_str', type=str, default='citeseer', help='type of dataset.')
+    parser.add_argument('--dataset_str', type=str, default='cora', help='type of dataset.')
     parser.add_argument('--dataset_func', type=str, default='Planetoid', help='type of dataset.')
     parser.add_argument('--beta', type=float, default=0.1, help='beta variable')
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
@@ -180,7 +218,7 @@ if __name__ == '__main__':
 
     # algorithms = [
     #     'cfgnn', 'loss_PN_L1_L2',
-    #     'loss_PN_AE_L1_L2_dist', 'loss_PN_AE_L1_L2', 'loss_PN_AE_', 'loss_PN', 'loss_PN_dist'
+    #     'loss_PN_AE_L1_L2_dist', 'loss_PN_AE_L1_L2', 'loss_PN_AE', 'loss_PN', 'loss_PN_dist'
     # ]
     # datasets = ['cora', 'citeseer', 'pubmed']
 

@@ -101,7 +101,7 @@ class CFExplainer:
             loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss__(
                 self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot, l1=1, l2=1, ae=1, dist=0
             )
-        elif self.algorithm == 'loss_PN_AE_':
+        elif self.algorithm == 'loss_PN_AE':
             loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss__(
                 self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot, l1=0, l2=0, ae=1, dist=0
             )
@@ -160,7 +160,7 @@ class CFExplainer:
                     loss_graph_dist.item(), L1,
                     L2, l2_AE,
                 ]
-        return cf_stats, loss_perturb
+        return cf_stats, loss_total.item()
 
     def explain(
             self,

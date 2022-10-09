@@ -29,7 +29,7 @@ def clustering(graph:nx):
     return nx.clustering(graph)
 
 
-def graph_evaluation_metrics(model, sub_feat, sub_adj, cf_examples, name='', device='cuda'):
+def graph_evaluation_metrics(model, sub_feat, sub_adj, cf_examples, cen_dist, name='', device='cuda'):
 
     b = model.forward(sub_feat, normalize_adj(sub_adj, device), logit=False)
     res = []
@@ -40,6 +40,7 @@ def graph_evaluation_metrics(model, sub_feat, sub_adj, cf_examples, name='', dev
         f = f.cpu().numpy()
         s = (cf_adj <sub_adj).sum()/ sub_adj.sum()
         s = s.cpu().numpy()
+        r = (cf_adj <sub_adj).sum().cpu().numpy()
         l = torch.linalg.norm(cf_adj, ord=1)
         l = l.cpu().numpy()
         lpur = cf_examples[i][11]
@@ -47,15 +48,20 @@ def graph_evaluation_metrics(model, sub_feat, sub_adj, cf_examples, name='', dev
         l1 = cf_examples[i][13]
         l2 = cf_examples[i][14]
         ae = cf_examples[i][15]
-        res.append([f, s, l, lpur, lgd, l1, l2, ae])
+        br = cen_dist['brandes'][i]
+        bt = cen_dist['betweenness'][i]
+        cl = cen_dist['closeness'][i]
+        res.append([f, s, r, l, lpur, lgd, l1, l2, ae, br, cl, bt])
 
     df = pd.DataFrame(
         res,
         columns=[
             'fidelity', 'sparsity',
-            'l1_norm', 'loss_perturb',
-            'loss_dist', 'l1_p_hat',
-            'l2_p_hat', 'ae_dist',
+            'removed_edges', 'l1_norm',
+            'loss_perturb', 'loss_dist',
+            'l1_p_hat', 'l2_p_hat',
+            'ae_dist', 'brandes',
+            'closeness', 'betweenness'
         ]
     )
     df.to_csv(f'{name}.csv', index=False)

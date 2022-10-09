@@ -79,7 +79,6 @@ class GCNSyntheticPerturb(nn.Module):
         self.device = device
         self.num_nodes = self.adj.shape[0]
         self.AE_threshold = AE_threshold
-        self.edge_addition = edge_addition  # are edge additions included in perturbed matrix
         self.kappa = torch.tensor(kappa).cuda()
         self.beta = torch.tensor(beta).cuda()
         self.const = torch.tensor(0.0, device=device)
@@ -91,10 +90,7 @@ class GCNSyntheticPerturb(nn.Module):
         # learn vector representing entries in upper/lower triangular matrix and use to populate P_hat later
         self.P_vec_size = int((self.num_nodes * self.num_nodes - self.num_nodes) / 2) + self.num_nodes
 
-        if self.edge_addition:
-            self.P_vec = Parameter(torch.FloatTensor(torch.zeros(self.P_vec_size)))
-        else:
-            self.P_vec = Parameter(torch.FloatTensor(torch.ones(self.P_vec_size)))
+        self.P_vec = Parameter(torch.FloatTensor(torch.ones(self.P_vec_size)))
 
         self.reset_parameters()
 
@@ -121,17 +117,7 @@ class GCNSyntheticPerturb(nn.Module):
 
     def reset_parameters(self, eps=10 ** -4):
         # Think more about how to initialize this
-        with torch.no_grad():
-            if self.edge_addition:
-                adj_vec = create_vec_from_symm_matrix(self.adj, self.P_vec_size, device=self.device).cpu().numpy()
-                for i in range(len(adj_vec)):
-                    if i < 1:
-                        adj_vec[i] = adj_vec[i] - eps
-                    else:
-                        adj_vec[i] = adj_vec[i] + eps
-                torch.add(self.P_vec, torch.FloatTensor(adj_vec))  # self.P_vec is all 0s
-            else:
-                torch.sub(self.P_vec, eps)
+        torch.sub(self.P_vec, eps)
 
     def forward(self, x, sub_adj, logits=True):
         self.sub_adj = sub_adj
@@ -202,7 +188,6 @@ class GCNSyntheticPerturb(nn.Module):
 
         A_tilde = torch.FloatTensor(self.num_nodes, self.num_nodes)
         A_tilde.requires_grad = True
-
         # Learn P_hat that gets multiplied element-wise with adj -- only edge deletions
         A_tilde = torch.sigmoid(self.P_hat_symm) * self.sub_adj.cuda()
         # + torch.eye(self.num_nodes).cuda()  # Use sigmoid to bound P_hat in [0,1]

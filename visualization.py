@@ -104,7 +104,7 @@ class plot_graph:
         if plot_all_edges:
             nx.draw_networkx_edges(self.G, self.pos, width=1, alpha=1, edge_color='grey', style=':')
         else:
-            nx.draw_networkx_edges(self.G, self.pos,edgelist=edge_list,
+            nx.draw_networkx_edges(self.G, self.pos, edgelist=edge_list,
                                    width=1, alpha=1, edge_color='grey', style=':')
 
         nx.draw_networkx_edges(self.G, self.pos,

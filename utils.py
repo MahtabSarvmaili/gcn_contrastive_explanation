@@ -172,3 +172,13 @@ def redo_dataset_pgexplainer_format(dataset, train_idx, test_idx):
     dataset.data.test_mask = index_to_mask(test_idx[len(test_idx)], size=dataset.data.num_nodes)
 
 
+def perturb_sub_adjacency(num_nodes, sub_adj, threshold):
+    psub_adj_list = []
+    vec_size = int((num_nodes * num_nodes - num_nodes) / 2) + num_nodes
+    for x in threshold:
+        vec = torch.FloatTensor(np.random.uniform(size=[vec_size]) > x).cuda()
+        psub_adj = create_symm_matrix_from_vec(vec, num_nodes)
+        psub_adj = psub_adj * sub_adj
+        psub_adj_list.append(psub_adj)
+    return psub_adj_list
+
