@@ -35,8 +35,8 @@ def graph_evaluation_metrics(model, sub_feat, sub_adj, cf_examples, cen_dist, na
     res = []
     for i in range(len(cf_examples)):
         cf_adj = torch.from_numpy(cf_examples[i][2]).cuda()
-        a = model.forward(sub_feat, normalize_adj(cf_adj, device), logit=False)
-        f = (a.argmax(dim=1) == b.argmax(dim=1)).sum() / a.__len__()
+        a = cf_examples[i][8]
+        f = (a == b.argmax(dim=1).cpu()).sum() / a.__len__()
         f = f.cpu().numpy()
         s = (cf_adj <sub_adj).sum()/ sub_adj.sum()
         s = s.cpu().numpy()
