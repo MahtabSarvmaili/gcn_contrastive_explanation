@@ -19,7 +19,7 @@ def pertinent_negative_loss(output, y_orig_onehot, const, kappa):
             (1 - y_orig_onehot) * output -
             (y_orig_onehot * 10000)).max(dim=0).values
     loss_perturb = torch.max(const, -max_nontarget_lab_score + target_lab_score + kappa)
-    return loss_perturb
+    return loss_perturb, max_nontarget_lab_score
 
 
 def pertinent_positive_loss(output, y_orig_onehot, const, kappa):
@@ -28,7 +28,7 @@ def pertinent_positive_loss(output, y_orig_onehot, const, kappa):
             (1 - y_orig_onehot) * output -
             (y_orig_onehot * 10000)).max(dim=0).values
     loss_perturb = torch.max(const, max_nontarget_lab_score - target_lab_score + kappa)
-    return loss_perturb
+    return loss_perturb, max_nontarget_lab_score
 
 
 def cross_loss(output, y):
@@ -108,7 +108,7 @@ class GCNSyntheticPerturb(nn.Module):
 
     def __AE_recons__(self, graph_AE, x, cf_adj):
         cf_adj_sparse = dense_to_sparse(cf_adj)[0]
-        reconst_P = (torch.sigmoid(graph_AE.forward(x, cf_adj_sparse)) >= self.AE_threshold).float()
+        reconst_P = (torch.sigmoid(graph_AE.forward(x, cf_adj_sparse)) <= self.AE_threshold).float()
         l2_AE = torch.dist(cf_adj, reconst_P, p=2)
         return l2_AE
 
@@ -234,6 +234,7 @@ class GCNSyntheticPerturb(nn.Module):
         return x
 
     def loss(self, output, y_pred_orig, y_pred_new_actual):
+        PLoss = 0
         pred_same = (y_pred_new_actual == y_pred_orig).float()
 
         # Need dim >=2 for F.nll_loss to work
@@ -248,14 +249,14 @@ class GCNSyntheticPerturb(nn.Module):
 
         # Zero-out loss_pred with pred_same if prediction flips
         loss_total = pred_same * loss_pred + self.beta * loss_graph_dist
-        return loss_total, loss_pred, loss_graph_dist, torch.inf, torch.inf, torch.inf, cf_adj
+        return loss_total, loss_pred, loss_graph_dist, torch.inf, torch.inf, torch.inf, cf_adj, PLoss
 
     def loss__(self, graph_AE, x, output, y_orig_onehot, l1=1, l2=1, ae=1, dist=1):
         closs = 0
         if self.PN_PP == "PP":
-            loss_perturb = pertinent_positive_loss(output, y_orig_onehot, self.const, self.kappa)
+            loss_perturb, PLoss = pertinent_positive_loss(output, y_orig_onehot, self.const, self.kappa)
         else:
-            loss_perturb = pertinent_negative_loss(output, y_orig_onehot, self.const, self.kappa)
+            loss_perturb, PLoss = pertinent_negative_loss(output, y_orig_onehot, self.const, self.kappa)
         cf_adj = self.P * self.adj
         cf_adj.requires_grad = True  # Need to change this otherwise loss_graph_dist has no gradient
         loss_graph_dist = torch.dist(cf_adj , self.adj.cuda(), p=1) / 2
@@ -265,4 +266,4 @@ class GCNSyntheticPerturb(nn.Module):
         # if self.cf_expl is False:
         #     closs = cross_loss(output.unsqueeze(dim=0), y_orig_onehot.argmax(keepdims=True))
         loss_total = loss_perturb + dist * self.beta * loss_graph_dist + l1 * self.psi_l1 * L1 + l2 * L2 + ae * self.gamma * l2_AE + closs
-        return loss_total, loss_perturb, loss_graph_dist, L1.item(), L2.item(), l2_AE.item(), cf_adj
+        return loss_total, loss_perturb, loss_graph_dist, L1.item(), L2.item(), l2_AE.item(), cf_adj, PLoss.item()

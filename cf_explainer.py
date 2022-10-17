@@ -44,7 +44,9 @@ class CFExplainer:
         self.edge_addition = edge_addition
         self.algorithm = algorithm
         self.cf_expl = cf_expl
-        self.losses = {'loss_total':[], 'loss_perturb':[], 'loss_graph_dist':[], 'L1':[], 'L2':[], 'l2_AE':[]}
+        self.losses = {
+            'loss_total':[], 'loss_perturb':[], 'loss_graph_dist':[], 'L1':[], 'L2':[], 'l2_AE':[]
+        }
         # Instantiate CF model class, load weights from original model
         self.cf_model = GCNSyntheticPerturb(
             self.sub_feat.shape[1], n_hid, n_hid,
@@ -86,31 +88,31 @@ class CFExplainer:
         self.cf_optimizer.zero_grad()
         output, output_actual, y_pred_new, y_pred_new_actual = self.predict_cf_model()
         if self.algorithm == 'cfgnn':
-            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss(
+            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj, PLoss = self.cf_model.loss(
                 output[self.new_idx], self.y_pred_orig, y_pred_new_actual
             )
         elif self.algorithm == 'loss_PN_L1_L2':
-            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss__(
+            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj, PLoss = self.cf_model.loss__(
                 self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot, l1=1, l2=1, ae=0, dist=0
             )
         elif self.algorithm == 'loss_PN_AE_L1_L2_dist':
-            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss__(
+            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj, PLoss = self.cf_model.loss__(
                 self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot, l1=1, l2=1, ae=1, dist=1
             )
         elif self.algorithm == 'loss_PN_AE_L1_L2':
-            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss__(
+            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj, PLoss = self.cf_model.loss__(
                 self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot, l1=1, l2=1, ae=1, dist=0
             )
         elif self.algorithm == 'loss_PN_AE':
-            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss__(
+            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj, PLoss = self.cf_model.loss__(
                 self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot, l1=0, l2=0, ae=1, dist=0
             )
         elif self.algorithm == 'loss_PN':
-            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss__(
+            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj, PLoss = self.cf_model.loss__(
                 self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot, l1=0, l2=0, ae=0, dist=0
             )
         elif self.algorithm == 'loss_PN_dist':
-            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj = self.cf_model.loss__(
+            loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj, PLoss = self.cf_model.loss__(
                 self.graph_AE, self.sub_feat, output[self.new_idx], self.y_orig_onehot, l1=0, l2=0, ae=0, dist=1
             )
 
@@ -147,6 +149,7 @@ class CFExplainer:
                     loss_total.item(), loss_perturb.item(),
                     loss_graph_dist.item(), L1,
                     L2, l2_AE,
+                    PLoss
                 ]
         else:
             if y_pred_new_actual == self.y_pred_orig:
@@ -159,6 +162,7 @@ class CFExplainer:
                     loss_total.item(), loss_perturb.item(),
                     loss_graph_dist.item(), L1,
                     L2, l2_AE,
+                    PLoss
                 ]
         return cf_stats, loss_total.item()
 

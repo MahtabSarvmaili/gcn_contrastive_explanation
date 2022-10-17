@@ -43,11 +43,11 @@ def graph_evaluation_metrics(model, sub_feat, sub_adj, cf_examples, cen_dist, na
         r = (cf_adj <sub_adj).sum().cpu().numpy()
         l = torch.linalg.norm(cf_adj, ord=1)
         l = l.cpu().numpy()
-        lpur = cf_examples[i][11]
         lgd = cf_examples[i][12]
         l1 = cf_examples[i][13]
         l2 = cf_examples[i][14]
         ae = cf_examples[i][15]
+        lpur = cf_examples[i][16]
         br = cen_dist['brandes'][i]
         bt = cen_dist['betweenness'][i]
         cl = cen_dist['closeness'][i]

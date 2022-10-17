@@ -14,7 +14,7 @@ def gae(args, data):
     model = DeepVGAE(data['feat_dim'], args.hidden1, args.hidden2).to(args.device)
     optimizer = Adam(model.parameters(), lr=args.lr)
     prev_prec = 0
-    patience = 3
+    patience = 15
     trigger_times = 0
     for epoch in range(args.epochs):
         model.train()
