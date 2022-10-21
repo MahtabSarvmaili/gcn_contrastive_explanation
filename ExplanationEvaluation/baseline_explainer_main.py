@@ -1,4 +1,5 @@
 import sys
+import traceback
 sys.path.insert(0,"../utils.py")
 from torch_geometric.datasets import Planetoid
 from torch_geometric.utils import to_dense_adj, dense_to_sparse
@@ -97,7 +98,7 @@ def train_model(model, epochs, data):
 
 def main():
     device = 'cpu'
-    dataset = 'citeseer'
+    dataset = 'pubmed'
     path = os.path.join(os.getcwd(), 'data', 'Planetoid')
     transformer = T.Compose([
         T.NormalizeFeatures(),
@@ -130,24 +131,24 @@ def main():
                 a.append([node_dict[x[0].item()], node_dict[x[1].item()]])
             b = np.array(a).T
             b = torch.tensor(b, dtype=torch.int64)
-            cf_labels = out.argmax(dim=1)
-            cf_expl = to_dense_adj(b, max_num_nodes=sub_adj.shape[0]).squeeze(dim=0)
+            expl_labels = out.argmax(dim=1)
+            expl = to_dense_adj(b, max_num_nodes=sub_adj.shape[0]).squeeze(dim=0)
             plt_graph = plot_graph(
                 sub_adj,
                 new_idx,
-                f'./results/gnnexplainer/citeseer/_{node_idx}_sub_adj_.png'
+                f'./results/pubmed/_{node_idx}_sub_adj_.png'
             )
             plt_graph.plot_org_graph(
-                cf_expl,
-                cf_labels,
+                expl,
+                expl_labels,
                 new_idx,
-                f'./results/gnnexplainer/citeseer/_{node_idx}_masked_sub_adj_.png'
+                f'./results/pubmed/_{node_idx}_masked_sub_adj_.png',
+                plot_grey_edges=False
             )
 
             print('test')
         except:
-            continue
-
+            traceback.print_exc()
 
 
 if __name__ == '__main__':

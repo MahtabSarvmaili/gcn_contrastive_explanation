@@ -70,7 +70,7 @@ class GCNSyntheticPerturb(nn.Module):
 
     def __init__(
             self, nfeat, nhid, nout, nclass, adj, dropout,
-            beta, gamma=0.09, kappa=10, psi=0.01, AE_threshold=0.5, PN_PP="PN", cf_expl=True, edge_addition=False, device='cuda'
+            beta, gamma=0.09, kappa=10, psi=0.09, AE_threshold=0.5, PN_PP="PN", cf_expl=True, edge_addition=False, device='cuda'
     ):
         super(GCNSyntheticPerturb, self).__init__()
         self.adj = adj
