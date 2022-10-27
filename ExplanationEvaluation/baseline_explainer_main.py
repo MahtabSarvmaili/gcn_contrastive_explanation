@@ -98,7 +98,7 @@ def train_model(model, epochs, data):
 
 def main():
     device = 'cpu'
-    dataset = 'pubmed'
+    dataset = 'citeseer'
     path = os.path.join(os.getcwd(), 'data', 'Planetoid')
     transformer = T.Compose([
         T.NormalizeFeatures(),
@@ -121,30 +121,30 @@ def main():
             sub_adj, sub_feat, sub_labels, node_dict, sub_edge_index = get_neighbourhood(
                 int(node_idx), train_dataset.edge_index, 4, train_dataset.x, output.argmax(dim=1))
             new_idx = node_dict[int(node_idx)]
-            # # pgexplainer = PGExplainer(model, train_dataset.edge_index, train_dataset.x, 'node')
-            # # pgexplainer.prepare(idx_test)
-            # graph, expl = pgexplainer.explain(node_idx)
-            node_feat_mask, edge_mask, out =gnnexplainer.explain_node(node_idx, train_dataset.x, train_dataset.edge_index)
-            masked_edge_idx = train_dataset.edge_index[:, edge_mask >= 0.5]
-            a = []
-            for x in masked_edge_idx.t():
-                a.append([node_dict[x[0].item()], node_dict[x[1].item()]])
-            b = np.array(a).T
-            b = torch.tensor(b, dtype=torch.int64)
-            expl_labels = out.argmax(dim=1)
-            expl = to_dense_adj(b, max_num_nodes=sub_adj.shape[0]).squeeze(dim=0)
-            plt_graph = plot_graph(
-                sub_adj,
-                new_idx,
-                f'./results/pubmed/_{node_idx}_sub_adj_.png'
-            )
-            plt_graph.plot_org_graph(
-                expl,
-                expl_labels,
-                new_idx,
-                f'./results/pubmed/_{node_idx}_masked_sub_adj_.png',
-                plot_grey_edges=False
-            )
+            pgexplainer = PGExplainer(model, train_dataset.edge_index, train_dataset.x, 'node')
+            pgexplainer.prepare(idx_test)
+            graph, expl = pgexplainer.explain(node_idx)
+            # node_feat_mask, edge_mask, out =gnnexplainer.explain_node(node_idx, train_dataset.x, train_dataset.edge_index)
+            # masked_edge_idx = train_dataset.edge_index[:, edge_mask >= 0.5]
+            # a = []
+            # for x in masked_edge_idx.t():
+            #     a.append([node_dict[x[0].item()], node_dict[x[1].item()]])
+            # b = np.array(a).T
+            # b = torch.tensor(b, dtype=torch.int64)
+            # expl_labels = out.argmax(dim=1)
+            # expl = to_dense_adj(b, max_num_nodes=sub_adj.shape[0]).squeeze(dim=0)
+            # plt_graph = plot_graph(
+            #     sub_adj,
+            #     new_idx,
+            #     f'./results/citeseer/_{node_idx}_sub_adj_.png'
+            # )
+            # plt_graph.plot_org_graph(
+            #     expl,
+            #     expl_labels.numpy(),
+            #     new_idx,
+            #     f'./results/citeseer/_{node_idx}_masked_sub_adj_.png',
+            #     plot_grey_edges=False
+            # )
 
             print('test')
         except:

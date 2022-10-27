@@ -1,3 +1,4 @@
+from datetime import datetime
 import networkx as nx
 import torch
 from torch_geometric.utils import dense_to_sparse
@@ -64,6 +65,7 @@ def graph_evaluation_metrics(model, sub_feat, sub_adj, cf_examples, cen_dist, na
             'closeness', 'betweenness'
         ]
     )
+
     df.to_csv(f'{name}.csv', index=False)
 
 

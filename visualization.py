@@ -86,6 +86,7 @@ class plot_graph:
             self, max_label, label2nodes, node_idx, labels,
             pos_edges, edge_list=None, removed_edges_list=None, removed_edge_index=None, plot_all_edges=True, name=''
     ):
+
         plt.close()
         for i in range(max_label):
             node_filter = []

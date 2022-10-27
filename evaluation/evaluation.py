@@ -1,11 +1,13 @@
+from datetime import datetime
 import torch
 from torch_geometric.utils import dense_to_sparse
 import pandas as pd
 import numpy as np
 from utils import normalize_adj
 from visualization import plot_graph, plot_centrality
+from evaluation.graph_perturbation import swap
 from evaluation.evaluation_metrics import gen_graph, graph_evaluation_metrics, centrality
-import networkx as nx
+from networkx import double_edge_swap, adjacency_matrix
 
 torch.manual_seed(0)
 np.random.seed(0)
@@ -14,6 +16,7 @@ np.random.seed(0)
 def evaluate_cf_PN(
         explainer_args, model, sub_feat, sub_adj, sub_labels, sub_edge_index, new_idx, i, cf_example, pcf_example=None
 ):
+    s = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
     plotting_graph = plot_graph(
         sub_adj.cpu().numpy(),
         new_idx,
@@ -22,7 +25,8 @@ def evaluate_cf_PN(
         f'cf_expl_{explainer_args.cf_expl}/'
         f'pn_pp_{explainer_args.PN_PP}/'
         f'{explainer_args.algorithm}/'
-        f'_{i}_sub_adj_{explainer_args.graph_result_name}.png'
+        f'_{i}_sub_adj_{explainer_args.graph_result_name}_'
+        f'{s}.png'
     )
     plotting_graph.plot_org_graph(
         sub_adj.cpu().numpy(),
@@ -59,7 +63,8 @@ def evaluate_cf_PN(
                 f'{explainer_args.algorithm}/'
                 f'_{i}_counter_factual_{j}_'
                 f'_epoch_{x[3]}_'
-                f'{explainer_args.graph_result_name}__removed_edges__.png',
+                f'{explainer_args.graph_result_name}__removed_edges___'
+                f'{s}.png'
             )
             plotting_graph.plot_org_graph(
                 del_edge_adj,
@@ -70,7 +75,8 @@ def evaluate_cf_PN(
                      f'cf_expl_{explainer_args.cf_expl}/'
                      f'pn_pp_{explainer_args.PN_PP}/'
                      f'{explainer_args.algorithm}/'
-                     f'_{i}_counter_cf_adj_{explainer_args.graph_result_name}.png',
+                     f'_{i}_counter_cf_adj_{explainer_args.graph_result_name}.png_'
+                     f'{s}.png',
                 plot_grey_edges=True
             )
             cf_edge_index = dense_to_sparse(torch.tensor(cf_sub_adj))[0].t().cpu().numpy()
@@ -110,6 +116,8 @@ def evaluate_cf_PN(
         f'pn_pp_{explainer_args.PN_PP}/'
         f'{explainer_args.algorithm}/'
         f'_{i}_counter_factual_{explainer_args.graph_result_name}_sub_graph_'
+        f'{s}'
+
     )
 
 
@@ -205,3 +213,11 @@ def evaluate_cf_PP(
         f'{explainer_args.algorithm}/'
         f'_{i}_counter_factual_{explainer_args.graph_result_name}_sub_graph_'
     )
+
+
+def swap_edges(sub_adj, sub_edge_index):
+    nodes = list(range(sub_adj.shape[0]))
+    g = gen_graph(nodes, sub_edge_index.cpu().t().numpy())
+    g_p = double_edge_swap(g, nswap=1)
+    sub_adj_p = torch.FloatTensor(adjacency_matrix(g_p, nodelist=nodes).todense()).cuda()
+    return sub_adj_p
