@@ -9,8 +9,8 @@ from utils import get_degree_matrix
 from gcn_perturb import GCNSyntheticPerturb
 from visualization import plot_errors
 
-# torch.manual_seed(0)
-# np.random.seed(0)
+torch.manual_seed(0)
+np.random.seed(0)
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
 
@@ -164,7 +164,7 @@ class CFExplainer:
                     L2, l2_AE,
                     PLoss
                 ]
-        return cf_stats, loss_total.item()
+        return cf_stats, loss_perturb.item()
 
     def explain(
             self,

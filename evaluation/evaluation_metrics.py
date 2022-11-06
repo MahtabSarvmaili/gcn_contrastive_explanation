@@ -44,7 +44,7 @@ def graph_evaluation_metrics(model, sub_feat, sub_adj, sub_labels, cf_examples, 
         r = (cf_adj <sub_adj).sum().cpu().numpy()
         l = torch.linalg.norm(cf_adj, ord=1)
         l = l.cpu().numpy()
-
+        p = cf_adj.sum().cpu().numpy()
         ###
         idxs = dense_to_sparse(torch.FloatTensor(cf_examples[i][2]))[0][1].cpu().numpy()
         ppf = (cf_examples[i][8][idxs].cpu().numpy() == sub_labels.cpu().numpy()[idxs]).sum() / idxs.__len__()
@@ -56,7 +56,7 @@ def graph_evaluation_metrics(model, sub_feat, sub_adj, sub_labels, cf_examples, 
         lpur = cf_examples[i][16]
         bt = cen_dist['betweenness'][i]
         cl = cen_dist['closeness'][i]
-        res.append([f, s, r, l, lpur, lgd, l1, l2, ae, ppf, cl, bt])
+        res.append([f, s, r, l, lpur, lgd, l1, l2, ae, ppf, cl, bt, p])
 
     df = pd.DataFrame(
         res,
@@ -66,7 +66,8 @@ def graph_evaluation_metrics(model, sub_feat, sub_adj, sub_labels, cf_examples, 
             'loss_perturb', 'loss_dist',
             'l1_p_hat', 'l2_p_hat',
             'ae_dist', 'pp_fidelity',
-            'closeness', 'betweenness'
+            'closeness', 'betweenness',
+            'present_edges'
         ]
     )
 

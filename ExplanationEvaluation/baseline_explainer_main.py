@@ -1,9 +1,12 @@
 import sys
 import traceback
+from datetime import datetime
 sys.path.insert(0,"../utils.py")
-from torch_geometric.datasets import Planetoid
+from torch_geometric.datasets import Planetoid, BAShapes
 from torch_geometric.utils import to_dense_adj, dense_to_sparse
 from torch_geometric.nn import GCNConv, GNNExplainer, Linear
+from data.data_loader import load_data, load_synthetic, load_synthetic_AE, load_data_AE
+from data.gengraph import gen_syn1, gen_syn2, gen_syn3, gen_syn4
 from explainers.PGExplainer import PGExplainer
 from baseline_utils.graph_utils import normalize_adj, get_neighbourhood
 from visualization import plot_graph
@@ -97,8 +100,9 @@ def train_model(model, epochs, data):
 
 
 def main():
+    s = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
     device = 'cpu'
-    dataset = 'citeseer'
+    dataset = 'pubmed'
     path = os.path.join(os.getcwd(), 'data', 'Planetoid')
     transformer = T.Compose([
         T.NormalizeFeatures(),
@@ -106,49 +110,56 @@ def main():
         T.RandomNodeSplit(num_val=0.1, num_test=0.2),
     ])
     train_dataset = Planetoid(path, dataset, transform=transformer)[0]
+    # train_dataset = load_synthetic(gen_syn1, device)['dataset']
     adj = to_dense_adj(train_dataset.edge_index).squeeze(dim=0)
-    adj_norm = normalize_adj(adj, device)
     # train_dataset.edge_index = dense_to_sparse(adj_norm)
     idx_test = np.arange(0, train_dataset.num_nodes)[train_dataset.test_mask.cpu()]
     idx_test = [int(x) for x in idx_test]
     model = Net(num_features=train_dataset.num_features, num_classes=train_dataset.y.unique().__len__())
     train_model(model, epochs=100, data=train_dataset)
     output = model(train_dataset.x, train_dataset.edge_index)
-    gnnexplainer = GNNExplainer(model, num_hops=4)
-
-    for node_idx in idx_test[:20]:
+    gnnexplainer = GNNExplainer(model, num_hops=4, epochs=100)
+    ppf = 0
+    for node_idx in idx_test[0:10]:
         try:
             sub_adj, sub_feat, sub_labels, node_dict, sub_edge_index = get_neighbourhood(
                 int(node_idx), train_dataset.edge_index, 4, train_dataset.x, output.argmax(dim=1))
             new_idx = node_dict[int(node_idx)]
-            pgexplainer = PGExplainer(model, train_dataset.edge_index, train_dataset.x, 'node')
-            pgexplainer.prepare(idx_test)
-            graph, expl = pgexplainer.explain(node_idx)
-            # node_feat_mask, edge_mask, out =gnnexplainer.explain_node(node_idx, train_dataset.x, train_dataset.edge_index)
-            # masked_edge_idx = train_dataset.edge_index[:, edge_mask >= 0.5]
-            # a = []
-            # for x in masked_edge_idx.t():
-            #     a.append([node_dict[x[0].item()], node_dict[x[1].item()]])
-            # b = np.array(a).T
-            # b = torch.tensor(b, dtype=torch.int64)
-            # expl_labels = out.argmax(dim=1)
-            # expl = to_dense_adj(b, max_num_nodes=sub_adj.shape[0]).squeeze(dim=0)
-            # plt_graph = plot_graph(
-            #     sub_adj,
-            #     new_idx,
-            #     f'./results/citeseer/_{node_idx}_sub_adj_.png'
-            # )
-            # plt_graph.plot_org_graph(
-            #     expl,
-            #     expl_labels.numpy(),
-            #     new_idx,
-            #     f'./results/citeseer/_{node_idx}_masked_sub_adj_.png',
-            #     plot_grey_edges=False
-            # )
-
+            # pgexplainer = PGExplainer(model, train_dataset.edge_index, train_dataset.x, 'node')
+            # pgexplainer.prepare(idx_test)
+            # graph, expl = pgexplainer.explain(node_idx)
+            node_feat_mask, edge_mask, out = gnnexplainer.explain_node(node_idx, train_dataset.x, train_dataset.edge_index)
+            # edge_mask = torch.sigmoid(edge_mask)
+            masked_edge_idx = train_dataset.edge_index[:, edge_mask >= 0.5]
+            a = []
+            for x in masked_edge_idx.t():
+                a.append([node_dict[x[0].item()], node_dict[x[1].item()]])
+            b = np.array(a).T
+            b = torch.tensor(b, dtype=torch.int64)
+            expl_labels = out.argmax(dim=1)
+            expl = to_dense_adj(b, max_num_nodes=sub_adj.shape[0]).squeeze(dim=0)
+            print(f'cf_adj present edges: {expl.sum()}')
+            sb_lb = train_dataset.y[masked_edge_idx.reshape(-1)]
+            ex_lb = expl_labels[b.reshape(-1)]
+            ppf = (ex_lb == sb_lb).sum() / sb_lb.__len__()
+            ppf = ppf.item()
+            plt_graph = plot_graph(
+                sub_adj,
+                new_idx,
+                f'./results/{dataset}/_{node_idx}_sub_adj_{s}.png'
+            )
+            plt_graph.plot_org_graph(
+                expl,
+                expl_labels.numpy(),
+                new_idx,
+                f'./results/{dataset}/_{node_idx}_masked_sub_adj_subgraph_fidelity_subgraph_fidelity_{expl.sum()}__{ppf}__{s}.png',
+                plot_grey_edges=False
+            )
             print('test')
         except:
             traceback.print_exc()
+            continue
+    return ppf
 
 
 if __name__ == '__main__':
@@ -156,5 +167,5 @@ if __name__ == '__main__':
     # p = os.path.dirname(c)
     # sys.path.insert(0, p)
     # from evaluation.evaluation_metrics import insertion
-
-    main()
+    t = main()
+    print(t)
