@@ -8,8 +8,8 @@ from torch_geometric.utils import dense_to_sparse
 from utils import get_degree_matrix, create_symm_matrix_from_vec, create_vec_from_symm_matrix
 from gae.utils import preprocess_graph
 from clustering.dmon import DMoN
-torch.manual_seed(0)
-np.random.seed(0)
+# torch.manual_seed(0)
+# np.random.seed(0)
 from layers import GraphConvolution
 
 
@@ -70,8 +70,11 @@ class GCNSyntheticPerturb(nn.Module):
 
     def __init__(
             self, nfeat, nhid, nout, nclass, adj, dropout,
-            beta, gamma=0.01, kappa=10, psi=0.9, AE_threshold=0.5, PN_PP="PN", cf_expl=True, edge_addition=False, device='cuda'
+            beta, gamma=0.09, kappa=10, psi=0.01, AE_threshold=0.5, PN_PP="PN", cf_expl=True, edge_addition=False, device='cuda'
     ):
+        # the best gamma and psi for prototype explanation are gamma=0.01, kappa=10, psi=0.09
+        # the best gamma and psi for CF explanation are gamma=0.09, kappa=10, psi=0.01
+
         super(GCNSyntheticPerturb, self).__init__()
         self.adj = adj
         self.nclass = nclass

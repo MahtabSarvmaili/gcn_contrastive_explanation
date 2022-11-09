@@ -1,15 +1,16 @@
 from datetime import datetime
 import torch
-from torch_geometric.utils import dense_to_sparse
 import pandas as pd
 import numpy as np
+from torch_geometric.utils import dense_to_sparse
+from scipy.spatial.distance import cosine
 from utils import normalize_adj
 from visualization import plot_graph, plot_centrality
 from evaluation.evaluation_metrics import gen_graph, graph_evaluation_metrics, centrality
 from networkx import double_edge_swap, adjacency_matrix
 
-torch.manual_seed(0)
-np.random.seed(0)
+# torch.manual_seed(0)
+# np.random.seed(0)
 
 
 def evaluate_cf_PN(
@@ -93,14 +94,23 @@ def evaluate_cf_PN(
             #     f'_epoch_{x[3]}_'
             #     f'{explainer_args.graph_result_name}__centrality__'
             # )
-            cen_dist['betweenness'].append(np.linalg.norm(
-                    np.array(list(cf_cen['betweenness'].values())) - np.array(list(cen['betweenness'].values())))
+            cen_dist['betweenness'].append(
+                cosine(
+                    np.array(list(cf_cen['betweenness'].values())),
+                    np.array(list(cen['betweenness'].values()))
+                )
             )
-            cen_dist['closeness'].append(np.linalg.norm(
-                    np.array(list(cf_cen['closeness'].values())) - np.array(list(cen['closeness'].values())))
+            cen_dist['closeness'].append(
+                cosine(
+                    np.array(list(cf_cen['closeness'].values())),
+                    np.array(list(cen['closeness'].values()))
+                )
             )
-            cen_dist['brandes'].append(np.linalg.norm(
-                    np.array(list(cf_cen['brandes'].values())) - np.array(list(cen['brandes'].values())))
+            cen_dist['brandes'].append(
+                cosine(
+                    np.array(list(cf_cen['brandes'].values())),
+                    np.array(list(cen['brandes'].values()))
+                )
             )
             temp.append(x)
     graph_evaluation_metrics(
@@ -192,14 +202,23 @@ def evaluate_cf_PP(
             cf_nodes = list(range(cf_sub_adj.shape[0]))
             cf_g = gen_graph(cf_nodes, cf_edge_index)
             cf_cen = centrality(cf_g)
-            cen_dist['betweenness'].append(np.linalg.norm(
-                    np.array(list(cf_cen['betweenness'].values())) - np.array(list(cen['betweenness'].values())))
+            cen_dist['betweenness'].append(
+                cosine(
+                    np.array(list(cf_cen['betweenness'].values())),
+                    np.array(list(cen['betweenness'].values()))
+                )
             )
-            cen_dist['closeness'].append(np.linalg.norm(
-                    np.array(list(cf_cen['closeness'].values())) - np.array(list(cen['closeness'].values())))
+            cen_dist['closeness'].append(
+                cosine(
+                    np.array(list(cf_cen['closeness'].values())),
+                    np.array(list(cen['closeness'].values()))
+                )
             )
-            cen_dist['brandes'].append(np.linalg.norm(
-                    np.array(list(cf_cen['brandes'].values())) - np.array(list(cen['brandes'].values())))
+            cen_dist['brandes'].append(
+                cosine(
+                    np.array(list(cf_cen['brandes'].values())),
+                    np.array(list(cen['brandes'].values()))
+                )
             )
             temp.append(x)
 

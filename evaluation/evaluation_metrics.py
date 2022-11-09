@@ -7,8 +7,8 @@ import numpy as np
 from utils import normalize_adj
 import networkx as nx
 
-torch.manual_seed(0)
-np.random.seed(0)
+# torch.manual_seed(0)
+# np.random.seed(0)
 
 def gen_graph(nodes, edge_list):
     G = nx.Graph()

@@ -5,8 +5,8 @@ import torch
 import numpy as np
 import pandas as pd
 from torch_geometric.utils import k_hop_subgraph, to_dense_adj, subgraph
-torch.manual_seed(0)
-np.random.seed(0)
+# torch.manual_seed(0)
+# np.random.seed(0)
 
 
 def encode_onehot(labels):
