@@ -30,15 +30,31 @@ def clustering(graph:nx):
     return nx.clustering(graph)
 
 
-def graph_evaluation_metrics(model, sub_feat, sub_adj, sub_labels, cf_examples, cen_dist, name='', device='cuda'):
+def graph_evaluation_metrics(model, sub_feat, sub_adj, sub_labels, cf_examples, cen_dist, pcf_example, name='', device='cuda'):
 
     b = model.forward(sub_feat, normalize_adj(sub_adj, device), logit=False)
     res = []
+
+    # calculating the stability of fidelity for perturbed examples
+    fidelity = []
+    for x in pcf_example:
+        fids = []
+        for i in range(len(x)):
+            if x[i][2].sum() < sub_adj.sum():
+                a = x[i][8]
+                f = (a == b.argmax(dim=1).cpu()).sum() / a.__len__()
+                f = f.cpu().numpy()
+                fids.append(f)
+        fidelity.append(np.array(fids).max())
+
+    fidelity = np.array(fidelity)
+    cf_expl_fids = []
     for i in range(len(cf_examples)):
         cf_adj = torch.from_numpy(cf_examples[i][2]).cuda()
         a = cf_examples[i][8]
         f = (a == b.argmax(dim=1).cpu()).sum() / a.__len__()
         f = f.cpu().numpy()
+        cf_expl_fids.append(f)
         s = (cf_adj <sub_adj).sum()/ sub_adj.sum()
         s = s.cpu().numpy()
         r = (cf_adj <sub_adj).sum().cpu().numpy()
@@ -57,6 +73,9 @@ def graph_evaluation_metrics(model, sub_feat, sub_adj, sub_labels, cf_examples, 
         bt = cen_dist['betweenness'][i]
         cl = cen_dist['closeness'][i]
         res.append([f, s, r, l, lpur, lgd, l1, l2, ae, ppf, cl, bt, p])
+
+    max_selected_fids = np.array(cf_expl_fids).max()
+    fid_diff_actual_perturb = max_selected_fids.abs(max_selected_fids - fidelity)
 
     df = pd.DataFrame(
         res,

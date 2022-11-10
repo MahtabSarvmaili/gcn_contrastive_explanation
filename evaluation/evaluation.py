@@ -8,7 +8,7 @@ from utils import normalize_adj
 from visualization import plot_graph, plot_centrality
 from evaluation.evaluation_metrics import gen_graph, graph_evaluation_metrics, centrality
 from networkx import double_edge_swap, adjacency_matrix
-
+from cf_explainer import CFExplainer
 # torch.manual_seed(0)
 # np.random.seed(0)
 
@@ -83,17 +83,6 @@ def evaluate_cf_PN(
             cf_nodes = list(range(cf_sub_adj.shape[0]))
             cf_g = gen_graph(cf_nodes, cf_edge_index)
             cf_cen = centrality(cf_g)
-            # plot_centrality(
-            #     cen, cf_cen,
-            #     f'{explainer_args.graph_result_dir}/'
-            #     f'{explainer_args.dataset_str}/'
-            #     f'cf_expl_{explainer_args.cf_expl}/'
-            #     f'pn_pp_{explainer_args.PN_PP}/'
-            #     f'{explainer_args.algorithm}/'
-            #     f'_{i}_counter_factual_{j}_'
-            #     f'_epoch_{x[3]}_'
-            #     f'{explainer_args.graph_result_name}__centrality__'
-            # )
             cen_dist['betweenness'].append(
                 cosine(
                     np.array(list(cf_cen['betweenness'].values())),
@@ -120,6 +109,7 @@ def evaluate_cf_PN(
         sub_labels,
         temp,
         cen_dist,
+        pcf_example,
         f'{explainer_args.graph_result_dir}/'
         f'{explainer_args.dataset_str}/'
         f'cf_expl_{explainer_args.cf_expl}/'
@@ -239,9 +229,57 @@ def evaluate_cf_PP(
     )
 
 
-def swap_edges(sub_adj, sub_edge_index):
+def swap_edges(sub_adj, sub_edge_index, num_samples):
     nodes = list(range(sub_adj.shape[0]))
     g = gen_graph(nodes, sub_edge_index.cpu().t().numpy())
-    g_p = double_edge_swap(g, nswap=1)
-    sub_adj_p = torch.FloatTensor(adjacency_matrix(g_p, nodelist=nodes).todense()).cuda()
+    sub_adj_p = []
+    for _ in range(num_samples):
+        g_p = double_edge_swap(g, nswap=1)
+        sub_adj_p.append(torch.FloatTensor(adjacency_matrix(g_p, nodelist=nodes).todense()).cuda())
     return sub_adj_p
+
+
+def stability_evaluation(
+        model,
+        graph_ae,
+        sub_feat,
+        sub_labels,
+        sub_adj_p,
+        new_idx,
+        num_classes,
+        threshold,
+        explainer_args
+):
+    explainer = CFExplainer(
+        model=model,
+        graph_ae=graph_ae,
+        sub_adj=sub_adj_p,
+        sub_feat=sub_feat,
+        n_hid=explainer_args.hidden,
+        dropout=explainer_args.dropout,
+        cf_optimizer=explainer_args.cf_optimizer,
+        lr=explainer_args.cf_lr,
+        n_momentum=explainer_args.n_momentum,
+        sub_labels=sub_labels,
+        y_pred_orig=sub_labels[new_idx],
+        num_classes=num_classes,
+        beta=explainer_args.beta,
+        device=explainer_args.device,
+        AE_threshold=threshold[explainer_args.dataset_str],
+        PN_PP=explainer_args.PN_PP,
+        cf_expl=explainer_args.cf_expl,
+        algorithm=explainer_args.algorithm,
+        edge_addition=explainer_args.edge_addition
+    )
+    explainer.cf_model.cuda()
+    cf_example_p = explainer.explain(
+        node_idx=i,
+        new_idx=new_idx,
+        num_epochs=explainer_args.cf_epochs,
+        path=f'{explainer_args.graph_result_dir}/'
+             f'{explainer_args.dataset_str}/'
+             f'cf_expl_{explainer_args.cf_expl}/'
+             f'pn_pp_{explainer_args.PN_PP}/'
+             f'{explainer_args.algorithm}/'
+             f'_{i}_loss_.png'
+    )
