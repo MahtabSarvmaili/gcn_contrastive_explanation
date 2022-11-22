@@ -185,7 +185,7 @@ class CFExplainer:
         num_cf_examples = 0
         for epoch in range(num_epochs):
             new_example, loss_total = self.train_cf_model_pn(epoch)
-            if new_example != [] and loss_total <= best_loss:
+            if new_example != [] and loss_total <= best_loss and new_example[2].sum() < self.sub_adj.sum():
                 best_cf_example.append(new_example)
                 best_loss = loss_total
                 num_cf_examples += 1

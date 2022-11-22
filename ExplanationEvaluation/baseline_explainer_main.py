@@ -4,10 +4,11 @@ from datetime import datetime
 sys.path.insert(0,"../utils.py")
 from torch_geometric.datasets import Planetoid, BAShapes
 from torch_geometric.utils import to_dense_adj, dense_to_sparse
-from torch_geometric.nn import GCNConv, GNNExplainer, Linear
+from torch_geometric.nn import GCNConv, GNNExplainer, Explainer, Linear
 from data.data_loader import load_data, load_synthetic, load_synthetic_AE, load_data_AE
 from data.gengraph import gen_syn1, gen_syn2, gen_syn3, gen_syn4
-from explainers.PGExplainer import PGExplainer
+# from explainers.PGExplainer import PGExplainer
+from explainers.torch_geometric_PGExplainer import PGExplainer
 from baseline_utils.graph_utils import normalize_adj, get_neighbourhood
 from visualization import plot_graph
 import torch_geometric.transforms as T
@@ -102,7 +103,7 @@ def train_model(model, epochs, data):
 def main():
     s = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
     device = 'cpu'
-    dataset = 'pubmed'
+    dataset = 'cora'
     path = os.path.join(os.getcwd(), 'data', 'Planetoid')
     transformer = T.Compose([
         T.NormalizeFeatures(),
@@ -113,21 +114,29 @@ def main():
     # train_dataset = load_synthetic(gen_syn1, device)['dataset']
     adj = to_dense_adj(train_dataset.edge_index).squeeze(dim=0)
     # train_dataset.edge_index = dense_to_sparse(adj_norm)
+    idx_train = np.arange(0, train_dataset.num_nodes)[train_dataset.train_mask.cpu()]
+    idx_train = np.random.choice(idx_train,30)
     idx_test = np.arange(0, train_dataset.num_nodes)[train_dataset.test_mask.cpu()]
+
     idx_test = [int(x) for x in idx_test]
     model = Net(num_features=train_dataset.num_features, num_classes=train_dataset.y.unique().__len__())
     train_model(model, epochs=100, data=train_dataset)
     output = model(train_dataset.x, train_dataset.edge_index)
     gnnexplainer = GNNExplainer(model, num_hops=4, epochs=100)
     ppf = 0
-    for node_idx in idx_test[0:10]:
+    for node_idx in idx_test[0:1]:
         try:
             sub_adj, sub_feat, sub_labels, node_dict, sub_edge_index = get_neighbourhood(
                 int(node_idx), train_dataset.edge_index, 4, train_dataset.x, output.argmax(dim=1))
             new_idx = node_dict[int(node_idx)]
             # pgexplainer = PGExplainer(model, train_dataset.edge_index, train_dataset.x, 'node')
             # pgexplainer.prepare(idx_test)
-            # graph, expl = pgexplainer.explain(node_idx)
+            # graph, expl, out = pgexplainer.explain(node_idx)
+            z = model.embedding(train_dataset.x, train_dataset.edge_index)
+            pgexplainer = PGExplainer(model, out_channels=z.shape[1], task='node',
+                            log=False, return_type='log_prob')
+            pgexplainer.train_explainer(train_dataset.x, z, train_dataset.edge_index, node_idxs=torch.FloatTensor(idx_train))
+
             node_feat_mask, edge_mask, out = gnnexplainer.explain_node(node_idx, train_dataset.x, train_dataset.edge_index)
             # edge_mask = torch.sigmoid(edge_mask)
             masked_edge_idx = train_dataset.edge_index[:, edge_mask >= 0.5]
