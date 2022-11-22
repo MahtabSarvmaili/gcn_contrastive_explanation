@@ -77,7 +77,7 @@ def main(gae_args, explainer_args):
 
     idx_test = np.arange(0, data['n_nodes'])[data['test_mask'].cpu()]
     test_cf_examples = []
-    for i in idx_test[0:1]:
+    for i in idx_test[4:5]:
         try:
             sub_adj, sub_feat, sub_labels, node_dict, sub_edge_index = get_neighbourhood(
                 int(i), data['edge_index'],
@@ -130,7 +130,7 @@ def main(gae_args, explainer_args):
             )
             cf_example_p_list = []
             # stability evaluation
-            sub_adj_p_list = swap_edges(sub_adj, sub_edge_index, 2)
+            sub_adj_p_list = swap_edges(sub_adj, sub_edge_index, 5)
             for sub_adj_p in sub_adj_p_list:
                 explainer = CFExplainer(
                     model=model,
@@ -189,7 +189,7 @@ if __name__ == '__main__':
     parser.add_argument('--hidden2', type=int, default=16, help='Number of units in hidden layer 2.')
     parser.add_argument('--lr', type=float, default=0.01, help='Initial learning rate.')
     parser.add_argument('--dropout', type=float, default=0.0, help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset_str', type=str, default='cora', help='type of dataset.')
+    parser.add_argument('--dataset_str', type=str, default='citeseer', help='type of dataset.')
     gae_args = parser.parse_args()
 
     parser = argparse.ArgumentParser()
@@ -203,15 +203,15 @@ if __name__ == '__main__':
     parser.add_argument('--cf_lr', type=float, default=0.009, help='CF-explainer learning rate.')
     parser.add_argument('--dropout', type=float, default=0.2, help='Dropout rate (1 - keep probability).')
     parser.add_argument('--cf_optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset_str', type=str, default='cora', help='type of dataset.')
+    parser.add_argument('--dataset_str', type=str, default='citeseer', help='type of dataset.')
     parser.add_argument('--dataset_func', type=str, default='Planetoid', help='type of dataset.')
     parser.add_argument('--beta', type=float, default=0.1, help='beta variable')
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
     parser.add_argument('--edge-addition', type=bool, default=False, help='CF edge_addition')
     parser.add_argument('--graph_result_dir', type=str, default='./results', help='Result directory')
-    parser.add_argument('--algorithm', type=str, default='loss_PN_AE', help='Result directory')
-    parser.add_argument('--graph_result_name', type=str, default='loss_PN_AE', help='Result name')
-    parser.add_argument('--cf_train_loss', type=str, default='loss_PN_AE',
+    parser.add_argument('--algorithm', type=str, default='loss_PN_AE_L1_L2', help='Result directory')
+    parser.add_argument('--graph_result_name', type=str, default='loss_PN_AE_L1_L2', help='Result name')
+    parser.add_argument('--cf_train_loss', type=str, default='loss_PN_AE_L1_L2',
                         help='CF explainer loss function')
     parser.add_argument('--PN_PP', type=str, default="PN", help='CF explainer loss function')
     parser.add_argument('--cf_expl', type=bool, default=True, help='CF explainer loss function')

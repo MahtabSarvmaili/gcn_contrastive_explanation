@@ -188,7 +188,7 @@ class PGExplainer(BaseExplainer):
         index = int(index)
         if self.type == 'node':
             # Similar to the original paper we only consider a subgraph for explaining
-            graph = ptgeom.utils.k_hop_subgraph(index, 3, self.graphs)[1]
+            graph = ptgeom.utils.k_hop_subgraph(index, 4, self.graphs)[1]
             embeds = self.model_to_explain.embedding(self.features, self.graphs).detach()
         else:
             feats = self.features[index].clone().detach()
@@ -199,6 +199,8 @@ class PGExplainer(BaseExplainer):
         input_expl = self._create_explainer_input(graph, embeds, index).unsqueeze(dim=0)
         sampling_weights = self.explainer_model(input_expl)
         mask = self._sample_graph(sampling_weights, training=False).squeeze()
+        # output of model
+        masked_pred = self.model_to_explain(self.features, graph)
 
         expl_graph_weights = torch.zeros(graph.size(1)) # Combine with original graph
         for i in range(0, mask.size(0)):
@@ -206,4 +208,4 @@ class PGExplainer(BaseExplainer):
             t = index_edge(graph, pair)
             expl_graph_weights[t] = mask[i]
 
-        return graph, expl_graph_weights
+        return graph, expl_graph_weights, masked_pred
