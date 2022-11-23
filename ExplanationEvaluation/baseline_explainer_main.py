@@ -7,8 +7,8 @@ from torch_geometric.utils import to_dense_adj, dense_to_sparse
 from torch_geometric.nn import GCNConv, GNNExplainer, Explainer, Linear
 from data.data_loader import load_data, load_synthetic, load_synthetic_AE, load_data_AE
 from data.gengraph import gen_syn1, gen_syn2, gen_syn3, gen_syn4
-# from explainers.PGExplainer import PGExplainer
-from explainers.torch_geometric_PGExplainer import PGExplainer
+from explainers.PGExplainer import PGExplainer
+
 from baseline_utils.graph_utils import normalize_adj, get_neighbourhood
 from visualization import plot_graph
 import torch_geometric.transforms as T
@@ -115,7 +115,7 @@ def main():
     adj = to_dense_adj(train_dataset.edge_index).squeeze(dim=0)
     # train_dataset.edge_index = dense_to_sparse(adj_norm)
     idx_train = np.arange(0, train_dataset.num_nodes)[train_dataset.train_mask.cpu()]
-    idx_train = np.random.choice(idx_train,30)
+    idx_train = np.random.choice(idx_train,40)
     idx_test = np.arange(0, train_dataset.num_nodes)[train_dataset.test_mask.cpu()]
 
     idx_test = [int(x) for x in idx_test]
@@ -129,42 +129,48 @@ def main():
             sub_adj, sub_feat, sub_labels, node_dict, sub_edge_index = get_neighbourhood(
                 int(node_idx), train_dataset.edge_index, 4, train_dataset.x, output.argmax(dim=1))
             new_idx = node_dict[int(node_idx)]
-            # pgexplainer = PGExplainer(model, train_dataset.edge_index, train_dataset.x, 'node')
-            # pgexplainer.prepare(idx_test)
-            # graph, expl, out = pgexplainer.explain(node_idx)
-            z = model.embedding(train_dataset.x, train_dataset.edge_index)
-            pgexplainer = PGExplainer(model, out_channels=z.shape[1], task='node',
-                            log=False, return_type='log_prob')
-            pgexplainer.train_explainer(train_dataset.x, z, train_dataset.edge_index, node_idxs=torch.FloatTensor(idx_train))
+            pgexplainer = PGExplainer(model, train_dataset.edge_index, train_dataset.x, 'node')
+            pgexplainer.prepare(idx_test)
+            graph, expl, out, filter_edges, filter_nodes, filter_labels = pgexplainer.explain(node_idx)
+            filter_edges = torch.tensor(filter_edges)
+            pg_expl = to_dense_adj(filter_edges, max_num_nodes=adj.shape[0]).squeeze(dim=0)
 
-            node_feat_mask, edge_mask, out = gnnexplainer.explain_node(node_idx, train_dataset.x, train_dataset.edge_index)
-            # edge_mask = torch.sigmoid(edge_mask)
-            masked_edge_idx = train_dataset.edge_index[:, edge_mask >= 0.5]
+            sb_lb = train_dataset.y[filter_nodes]
+
+            pg_ppf = (filter_labels == sb_lb).sum() / sb_lb.__len__()
+            pg_ppf = pg_ppf.item()
+
+
+            node_feat_mask, gnnexpl_edge_mask, out = gnnexplainer.explain_node(node_idx, train_dataset.x, train_dataset.edge_index)
+            gnnexpl_edge_mask = gnnexpl_edge_mask>0.5
+            masked_edge_idx = train_dataset.edge_index[:, gnnexpl_edge_mask].T
             a = []
-            for x in masked_edge_idx.t():
+            for x in masked_edge_idx:
                 a.append([node_dict[x[0].item()], node_dict[x[1].item()]])
             b = np.array(a).T
             b = torch.tensor(b, dtype=torch.int64)
-            expl_labels = out.argmax(dim=1)
-            expl = to_dense_adj(b, max_num_nodes=sub_adj.shape[0]).squeeze(dim=0)
-            print(f'cf_adj present edges: {expl.sum()}')
+
+            expl_labels = out.argmax(dim=1)[b.reshape(-1)]
+            expl = to_dense_adj(masked_edge_idx, max_num_nodes=adj.shape[0]).squeeze(dim=0)
+            # print(f'cf_adj present edges: {expl.sum()}')
             sb_lb = train_dataset.y[masked_edge_idx.reshape(-1)]
-            ex_lb = expl_labels[b.reshape(-1)]
-            ppf = (ex_lb == sb_lb).sum() / sb_lb.__len__()
+
+            ppf = (expl_labels == sb_lb).sum() / sb_lb.__len__()
             ppf = ppf.item()
-            plt_graph = plot_graph(
-                sub_adj,
-                new_idx,
-                f'./results/{dataset}/_{node_idx}_sub_adj_{s}.png'
-            )
-            plt_graph.plot_org_graph(
-                expl,
-                expl_labels.numpy(),
-                new_idx,
-                f'./results/{dataset}/_{node_idx}_masked_sub_adj_subgraph_fidelity_subgraph_fidelity_{expl.sum()}__{ppf}__{s}.png',
-                plot_grey_edges=False
-            )
-            print('test')
+            print(f'GNNExplainer: {ppf}, PGExplainer:{pg_ppf}')
+            # plt_graph = plot_graph(
+            #     sub_adj,
+            #     new_idx,
+            #     f'./results/{dataset}/_{node_idx}_sub_adj_{s}.png'
+            # )
+            # plt_graph.plot_org_graph(
+            #     expl,
+            #     expl_labels.numpy(),
+            #     new_idx,
+            #     f'./results/{dataset}/_{node_idx}_masked_sub_adj_subgraph_fidelity_subgraph_fidelity_{expl.sum()}__{ppf}__{s}.png',
+            #     plot_grey_edges=False
+            # )
+            # print('test')
         except:
             traceback.print_exc()
             continue
@@ -177,4 +183,3 @@ if __name__ == '__main__':
     # sys.path.insert(0, p)
     # from evaluation.evaluation_metrics import insertion
     t = main()
-    print(t)

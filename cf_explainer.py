@@ -164,7 +164,7 @@ class CFExplainer:
                     L2, l2_AE,
                     PLoss
                 ]
-        return cf_stats, loss_total.item()
+        return cf_stats, loss_perturb.item()
 
     def explain(
             self,

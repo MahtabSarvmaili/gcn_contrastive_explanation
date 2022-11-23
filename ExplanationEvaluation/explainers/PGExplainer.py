@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import torch_geometric as ptgeom
 from torch import nn
@@ -208,4 +209,34 @@ class PGExplainer(BaseExplainer):
             t = index_edge(graph, pair)
             expl_graph_weights[t] = mask[i]
 
-        return graph, expl_graph_weights, masked_pred
+        sorted_edge_weigths, _ = torch.sort(expl_graph_weights)
+        thres_min = 5
+        thres_index = max(int(expl_graph_weights.shape[0] - 50), 0)
+
+        thres = sorted_edge_weigths[thres_index]
+        if thres_min == -1:
+            filter_thres_index = 0
+        else:
+            filter_thres_index = min(thres_index,
+                                     max(int(expl_graph_weights.shape[0] - expl_graph_weights.shape[0] / 2),
+                                         expl_graph_weights.shape[0] - thres_min))
+        filter_thres = sorted_edge_weigths[filter_thres_index]
+        # Init edges
+        filter_nodes = set()
+        filter_edges = []
+        pos_edges = []
+        # Select all edges and nodes to plot
+        for i in range(expl_graph_weights.shape[0]):
+            # Select important edges
+            if expl_graph_weights[i] >= thres and not graph[0][i] == graph[1][i]:
+                pos_edges.append([graph[0][i].item(), graph[1][i].item()])
+            # Select all edges to plot
+            if expl_graph_weights[i] > filter_thres and not graph[0][i] == graph[1][i]:
+                filter_edges.append([graph[0][i].item(), graph[1][i].item()])
+                filter_nodes.add(graph[0][i].item())
+                filter_nodes.add(graph[1][i].item())
+
+        filter_labels = masked_pred.argmax(dim=1)[np.array(list(filter_nodes))]
+        filter_nodes = np.array(list(filter_nodes))
+        filter_edges = np.array(filter_edges)
+        return graph, expl_graph_weights, masked_pred, filter_edges, filter_nodes, filter_labels
