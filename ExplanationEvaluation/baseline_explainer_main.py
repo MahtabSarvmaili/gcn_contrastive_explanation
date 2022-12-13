@@ -5,10 +5,11 @@ sys.path.insert(0,"../utils.py")
 from torch_geometric.datasets import Planetoid, BAShapes
 from torch_geometric.utils import to_dense_adj, dense_to_sparse
 from torch_geometric.nn import GCNConv, GNNExplainer, Explainer, Linear
+from evaluation.evaluation_metrics import gen_graph
+from networkx import double_edge_swap, adjacency_matrix
 from data.data_loader import load_data, load_synthetic, load_synthetic_AE, load_data_AE
 from data.gengraph import gen_syn1, gen_syn2, gen_syn3, gen_syn4
 from explainers.PGExplainer import PGExplainer
-
 from baseline_utils.graph_utils import normalize_adj, get_neighbourhood
 from visualization import plot_graph
 import torch_geometric.transforms as T
@@ -103,7 +104,7 @@ def train_model(model, epochs, data):
 def main():
     s = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
     device = 'cpu'
-    dataset = 'cora'
+    dataset = 'citeseer'
     path = os.path.join(os.getcwd(), 'data', 'Planetoid')
     transformer = T.Compose([
         T.NormalizeFeatures(),
@@ -119,12 +120,13 @@ def main():
     idx_test = np.arange(0, train_dataset.num_nodes)[train_dataset.test_mask.cpu()]
 
     idx_test = [int(x) for x in idx_test]
+    idx_test = idx_test[::-1]
     model = Net(num_features=train_dataset.num_features, num_classes=train_dataset.y.unique().__len__())
     train_model(model, epochs=100, data=train_dataset)
     output = model(train_dataset.x, train_dataset.edge_index)
     gnnexplainer = GNNExplainer(model, num_hops=4, epochs=100)
     ppf = 0
-    for node_idx in idx_test[0:1]:
+    for node_idx in idx_test[-5:]:
         try:
             sub_adj, sub_feat, sub_labels, node_dict, sub_edge_index = get_neighbourhood(
                 int(node_idx), train_dataset.edge_index, 4, train_dataset.x, output.argmax(dim=1))
@@ -133,13 +135,34 @@ def main():
             pgexplainer.prepare(idx_test)
             graph, expl, out, filter_edges, filter_nodes, filter_labels = pgexplainer.explain(node_idx)
             filter_edges = torch.tensor(filter_edges)
-            pg_expl = to_dense_adj(filter_edges, max_num_nodes=adj.shape[0]).squeeze(dim=0)
+            pg_expl = to_dense_adj(filter_edges.T, max_num_nodes=adj.shape[0]).squeeze(dim=0)
 
             sb_lb = train_dataset.y[filter_nodes]
 
             pg_ppf = (filter_labels == sb_lb).sum() / sb_lb.__len__()
-            pg_ppf = pg_ppf.item()
+            pg_ppf11 = pg_ppf.item()
+            p = expl.sum().detach().cpu().numpy()
+            s = (pg_expl < adj).sum() / adj.sum()
+            stab = 0
 
+            nodes = list(range(train_dataset.num_nodes))
+            g = gen_graph(nodes, train_dataset.edge_index.cpu().t().numpy())
+            fids = []
+            for _ in range(5):
+                g_p = double_edge_swap(g, nswap=1)
+                edge_idx_p = dense_to_sparse(torch.FloatTensor(adjacency_matrix(g_p, nodelist=nodes).todense()))[0]
+                pgexplainer = PGExplainer(model, edge_idx_p, train_dataset.x, 'node')
+                pgexplainer.prepare(idx_test)
+                graph, expl, out, filter_edges, filter_nodes, filter_labels = pgexplainer.explain(node_idx)
+                sb_lb = train_dataset.y[filter_nodes]
+
+                pg_ppf = (filter_labels == sb_lb).sum() / sb_lb.__len__()
+                fids.append(pg_ppf)
+
+            fids = np.array(fids)
+            fid_diff_actual_perturb = np.abs(pg_ppf - fids)
+            stab = fid_diff_actual_perturb.mean()
+            print(f'PGExplainer: node {node_idx}, Fidelity: {pg_ppf11} - Sparsity: {s}- #edges: {pg_expl.sum()}, Stability: {stab}')
 
             node_feat_mask, gnnexpl_edge_mask, out = gnnexplainer.explain_node(node_idx, train_dataset.x, train_dataset.edge_index)
             gnnexpl_edge_mask = gnnexpl_edge_mask>0.5
@@ -151,13 +174,44 @@ def main():
             b = torch.tensor(b, dtype=torch.int64)
 
             expl_labels = out.argmax(dim=1)[b.reshape(-1)]
-            expl = to_dense_adj(masked_edge_idx, max_num_nodes=adj.shape[0]).squeeze(dim=0)
+            expl = to_dense_adj(masked_edge_idx.T, max_num_nodes=adj.shape[0]).squeeze(dim=0)
             # print(f'cf_adj present edges: {expl.sum()}')
             sb_lb = train_dataset.y[masked_edge_idx.reshape(-1)]
 
             ppf = (expl_labels == sb_lb).sum() / sb_lb.__len__()
             ppf = ppf.item()
-            print(f'GNNExplainer: {ppf}, PGExplainer:{pg_ppf}')
+            s = (expl < adj).sum() / adj.sum()
+            s = s.cpu().numpy()
+            p = expl.sum().cpu().numpy()
+
+            # Stability
+            nodes = list(range(train_dataset.num_nodes))
+            g = gen_graph(nodes, train_dataset.edge_index.cpu().t().numpy())
+            fids = []
+            for _ in range(5):
+                g_p = double_edge_swap(g, nswap=1)
+                edge_idx_p = dense_to_sparse(torch.FloatTensor(adjacency_matrix(g_p, nodelist=nodes).todense()))[0]
+                _, mask_p, out = gnnexplainer.explain_node(node_idx, train_dataset.x, edge_idx_p)
+                edge_mask_p = mask_p > 0.5
+                masked_edge_idx_p = train_dataset.edge_index[:, edge_mask_p].T
+
+                a = []
+                for x in masked_edge_idx:
+                    a.append([node_dict[x[0].item()], node_dict[x[1].item()]])
+                b = np.array(a).T
+                b = torch.tensor(b, dtype=torch.int64)
+
+                expl_labels_p = out.argmax(dim=1)[b.reshape(-1)]
+
+                f = (expl_labels_p == output[b.reshape(-1)].argmax(dim=1)).sum() / expl_labels_p.__len__()
+                f = f.cpu().numpy()
+                fids.append(f)
+
+            fids = np.array(fids)
+            fid_diff_actual_perturb = np.abs(ppf - fids)
+            stab = fid_diff_actual_perturb.mean()
+
+            print(f'\nGNNExplainer: node {node_idx}, Fidelity: {ppf} - Sparsity: {s}- #edges: {p}, Stability: {stab}')
             # plt_graph = plot_graph(
             #     sub_adj,
             #     new_idx,
@@ -170,11 +224,11 @@ def main():
             #     f'./results/{dataset}/_{node_idx}_masked_sub_adj_subgraph_fidelity_subgraph_fidelity_{expl.sum()}__{ppf}__{s}.png',
             #     plot_grey_edges=False
             # )
-            # print('test')
+            print('test')
         except:
             traceback.print_exc()
             continue
-    return ppf
+    return
 
 
 if __name__ == '__main__':

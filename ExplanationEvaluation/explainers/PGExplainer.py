@@ -29,7 +29,10 @@ class PGExplainer(BaseExplainer):
     :function train: train the explainer
     :function explain: search for the subgraph which contributes most to the clasification decision of the model-to-be-explained.
     """
-    def __init__(self, model_to_explain, graphs, features, task, epochs=30, lr=0.003, temp=(5.0, 2.0), reg_coefs=(0.05, 1.0),sample_bias=0):
+    def __init__(
+            self, model_to_explain, graphs, features, task, epochs=30, lr=0.003, temp=(5.0, 2.0),
+            reg_coefs=(0.05, 1.0),sample_bias=0
+    ):
         super().__init__(model_to_explain, graphs, features, task)
 
         self.epochs = epochs

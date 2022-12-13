@@ -220,6 +220,8 @@ def evaluate_cf_PP(
         sub_labels,
         temp,
         cen_dist,
+        pcf_example,
+        explainer_args.PN_PP,
         f'{explainer_args.graph_result_dir}/'
         f'{explainer_args.dataset_str}/'
         f'cf_expl_{explainer_args.cf_expl}/'
@@ -239,48 +241,3 @@ def swap_edges(sub_adj, sub_edge_index, num_samples):
         sub_adj_p.append(torch.FloatTensor(adjacency_matrix(g_p, nodelist=nodes).todense()).cuda())
     return sub_adj_p
 
-
-def stability_evaluation(
-        model,
-        graph_ae,
-        sub_feat,
-        sub_labels,
-        sub_adj_p,
-        new_idx,
-        num_classes,
-        threshold,
-        explainer_args
-):
-    explainer = CFExplainer(
-        model=model,
-        graph_ae=graph_ae,
-        sub_adj=sub_adj_p,
-        sub_feat=sub_feat,
-        n_hid=explainer_args.hidden,
-        dropout=explainer_args.dropout,
-        cf_optimizer=explainer_args.cf_optimizer,
-        lr=explainer_args.cf_lr,
-        n_momentum=explainer_args.n_momentum,
-        sub_labels=sub_labels,
-        y_pred_orig=sub_labels[new_idx],
-        num_classes=num_classes,
-        beta=explainer_args.beta,
-        device=explainer_args.device,
-        AE_threshold=threshold[explainer_args.dataset_str],
-        PN_PP=explainer_args.PN_PP,
-        cf_expl=explainer_args.cf_expl,
-        algorithm=explainer_args.algorithm,
-        edge_addition=explainer_args.edge_addition
-    )
-    explainer.cf_model.cuda()
-    cf_example_p = explainer.explain(
-        node_idx=i,
-        new_idx=new_idx,
-        num_epochs=explainer_args.cf_epochs,
-        path=f'{explainer_args.graph_result_dir}/'
-             f'{explainer_args.dataset_str}/'
-             f'cf_expl_{explainer_args.cf_expl}/'
-             f'pn_pp_{explainer_args.PN_PP}/'
-             f'{explainer_args.algorithm}/'
-             f'_{i}_loss_.png'
-    )
