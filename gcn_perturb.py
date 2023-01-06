@@ -270,3 +270,28 @@ class GCNSyntheticPerturb(nn.Module):
         #     closs = cross_loss(output.unsqueeze(dim=0), y_orig_onehot.argmax(keepdims=True))
         loss_total = loss_perturb + dist * self.beta * loss_graph_dist + l1 * self.psi_l1 * L1 + l2 * L2 + ae * self.gamma * l2_AE + closs
         return loss_total, loss_perturb, loss_graph_dist, L1.item(), L2.item(), l2_AE.item(), cf_adj, PLoss.item()
+
+    def loss__nll(self, graph_AE, x, output, y_pred_orig, y_pred_new_actual, l1=1, l2=1, ae=1, dist=1):
+        PLoss = 0
+
+        output = output.unsqueeze(0)
+        y_pred_orig = y_pred_orig.unsqueeze(0)
+        cf_adj = self.P * self.adj
+        cf_adj.requires_grad = True  # Need to change this otherwise loss_graph_dist has no gradient
+        loss_graph_dist = torch.dist(cf_adj , self.adj.cuda(), p=1) / 2
+        l2_AE = self.__AE_recons__(graph_AE, x, cf_adj)
+        L1 = self.__L1__()
+        L2 = self.__L2__()
+
+
+        if self.PN_PP == 'PP':
+            pred_same = (y_pred_new_actual != y_pred_orig).float()
+            loss_pred = F.nll_loss(output, y_pred_orig)
+
+        else:
+            pred_same = (y_pred_new_actual == y_pred_orig).float()
+            loss_pred = - F.nll_loss(output, y_pred_orig)
+        loss_perturb = pred_same * loss_pred
+
+        loss_total = loss_perturb + dist * self.beta * loss_graph_dist + l1 * self.psi_l1 * L1 + l2 * L2 + ae * self.gamma * l2_AE
+        return loss_total, loss_perturb, loss_graph_dist, L1.item(), L2.item(), l2_AE.item(), cf_adj, PLoss.item()

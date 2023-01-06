@@ -5,7 +5,6 @@ import torch.optim as optim
 import torch.nn.functional as F
 from layers import GraphConvolution
 from utils import accuracy
-from visualization import simple_plot
 from sklearn.utils.class_weight import compute_class_weight
 # torch.manual_seed(0)
 # np.random.seed(0)

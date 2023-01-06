@@ -12,6 +12,7 @@ from model import GCN, train
 from cf_explainer import CFExplainer
 from gae.GAE import gae
 from evaluation.evaluation import evaluate_cf_PN, evaluate_cf_PP, swap_edges
+from visualization import plot_explanation_subgraph
 
 # torch.manual_seed(0)
 # np.random.seed(0)
@@ -21,12 +22,12 @@ sys.path.append('../..')
 
 def main(gae_args, explainer_args):
     torch.cuda.empty_cache()
-    data = load_data(explainer_args)
-    data_AE = load_data_AE(explainer_args)
-    # data =load_synthetic(gen_syn1, device=explainer_args.device)
-    # data_AE = load_synthetic_AE(gen_syn1, device=explainer_args.device)
+    # data = load_data(explainer_args)
+    # data_AE = load_data_AE(explainer_args)
+    data =load_synthetic(gen_syn1, device=explainer_args.device)
+    data_AE = load_synthetic_AE(gen_syn1, device=explainer_args.device)
     AE_threshold = {
-        'gen_syn1': 0.5,
+        'gen_syn1': 0.62,
         'gen_syn2': 0.65,
         'gen_syn3': 0.6,
         'gen_syn4': 0.62,
@@ -126,9 +127,16 @@ def main(gae_args, explainer_args):
                 f'{explainer_args.algorithm}/'
                 f'_{i}_loss_.png'
             )
+            min_sum = 10000
+            min_idx = 0
+            for ii, x in enumerate(cf_example):
+                if x[2].sum() < min_sum and x[2].sum()>0:
+                    min_sum = x[2].sum()
+                    min_idx = ii
+            plot_explanation_subgraph(cf_example[min_idx][2], cf_example[min_idx][8], new_idx, 'teeeeesssssttttt', plot_grey_edges=True)
             cf_example_p_list = []
             # stability evaluation
-            sub_adj_p_list = swap_edges(sub_adj, sub_edge_index, 5)
+            sub_adj_p_list = swap_edges(sub_adj, sub_edge_index, 1)
             for sub_adj_p in sub_adj_p_list:
                 explainer = CFExplainer(
                     model=model,
@@ -187,7 +195,7 @@ if __name__ == '__main__':
     parser.add_argument('--hidden2', type=int, default=16, help='Number of units in hidden layer 2.')
     parser.add_argument('--lr', type=float, default=0.01, help='Initial learning rate.')
     parser.add_argument('--dropout', type=float, default=0.0, help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset_str', type=str, default='pubmed', help='type of dataset.')
+    parser.add_argument('--dataset_str', type=str, default='gen_syn1', help='type of dataset.')
     gae_args = parser.parse_args()
 
     parser = argparse.ArgumentParser()
@@ -201,18 +209,18 @@ if __name__ == '__main__':
     parser.add_argument('--cf_lr', type=float, default=0.009, help='CF-explainer learning rate.')
     parser.add_argument('--dropout', type=float, default=0.2, help='Dropout rate (1 - keep probability).')
     parser.add_argument('--cf_optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset_str', type=str, default='pubmed', help='type of dataset.')
+    parser.add_argument('--dataset_str', type=str, default='gen_syn1', help='type of dataset.')
     parser.add_argument('--dataset_func', type=str, default='Planetoid', help='type of dataset.')
     parser.add_argument('--beta', type=float, default=0.1, help='beta variable')
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
     parser.add_argument('--edge-addition', type=bool, default=False, help='CF edge_addition')
     parser.add_argument('--graph_result_dir', type=str, default='./results', help='Result directory')
-    parser.add_argument('--algorithm', type=str, default='cfgnn', help='Result directory')
-    parser.add_argument('--graph_result_name', type=str, default='cfgnn', help='Result name')
-    parser.add_argument('--cf_train_loss', type=str, default='cfgnn',
+    parser.add_argument('--algorithm', type=str, default='loss_PN_L1_L2', help='Result directory')
+    parser.add_argument('--graph_result_name', type=str, default='loss_PN_L1_L2', help='Result name')
+    parser.add_argument('--cf_train_loss', type=str, default='loss_PN_L1_L2',
                         help='CF explainer loss function')
-    parser.add_argument('--PN_PP', type=str, default="PN", help='CF explainer loss function')
-    parser.add_argument('--cf_expl', type=bool, default=True, help='CF explainer loss function')
+    parser.add_argument('--PN_PP', type=str, default="PP", help='CF explainer loss function')
+    parser.add_argument('--cf_expl', type=bool, default=False, help='CF explainer loss function')
     parser.add_argument('--n_momentum', type=float, default=0.5, help='Nesterov momentum')
     explainer_args = parser.parse_args()
 

@@ -104,7 +104,7 @@ def train_model(model, epochs, data):
 def main():
     s = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
     device = 'cpu'
-    dataset = 'citeseer'
+    dataset = 'pubmed'
     path = os.path.join(os.getcwd(), 'data', 'Planetoid')
     transformer = T.Compose([
         T.NormalizeFeatures(),
@@ -134,15 +134,22 @@ def main():
             pgexplainer = PGExplainer(model, train_dataset.edge_index, train_dataset.x, 'node')
             pgexplainer.prepare(idx_test)
             graph, expl, out, filter_edges, filter_nodes, filter_labels = pgexplainer.explain(node_idx)
+
+            # pgexplainer = PGExplainer(model, sub_edge_index, sub_feat, 'node')
+            # pgexplainer.prepare(None)
+            # graph, expl, out, filter_edges, filter_nodes, filter_labels = pgexplainer.explain(new_idx)
+
             filter_edges = torch.tensor(filter_edges)
             pg_expl = to_dense_adj(filter_edges.T, max_num_nodes=adj.shape[0]).squeeze(dim=0)
-
+            # pg_expl = to_dense_adj(filter_edges.T, max_num_nodes=sub_adj.shape[0]).squeeze(dim=0)
             sb_lb = train_dataset.y[filter_nodes]
+            # sb_lb = sub_labels[filter_nodes]
 
             pg_ppf = (filter_labels == sb_lb).sum() / sb_lb.__len__()
             pg_ppf11 = pg_ppf.item()
             p = expl.sum().detach().cpu().numpy()
             s = (pg_expl < adj).sum() / adj.sum()
+            s = (pg_expl < sub_adj).sum() / sub_adj.sum()
             stab = 0
 
             nodes = list(range(train_dataset.num_nodes))

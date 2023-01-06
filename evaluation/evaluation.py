@@ -157,7 +157,7 @@ def evaluate_cf_PP(
     for j, x in enumerate(cf_example):
 
         cf_sub_adj = x[2]
-        if cf_sub_adj.sum() < sub_adj.sum():
+        if cf_sub_adj.sum() < sub_adj.sum() and cf_sub_adj.sum() != 0:
             del_edge_adj = 1 * (cf_sub_adj < sub_adj.cpu().numpy())
             plotting_graph.plot_cf_graph(
                 cf_sub_adj,
