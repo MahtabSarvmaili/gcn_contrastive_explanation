@@ -22,10 +22,10 @@ sys.path.append('../..')
 
 def main(gae_args, explainer_args):
     torch.cuda.empty_cache()
-    # data = load_data(explainer_args)
-    # data_AE = load_data_AE(explainer_args)
-    data =load_synthetic(gen_syn1, device=explainer_args.device)
-    data_AE = load_synthetic_AE(gen_syn1, device=explainer_args.device)
+    data = load_data(explainer_args)
+    data_AE = load_data_AE(explainer_args)
+    # data =load_synthetic(gen_syn1, device=explainer_args.device)
+    # data_AE = load_synthetic_AE(gen_syn1, device=explainer_args.device)
     AE_threshold = {
         'gen_syn1': 0.62,
         'gen_syn2': 0.65,
@@ -195,7 +195,7 @@ if __name__ == '__main__':
     parser.add_argument('--hidden2', type=int, default=16, help='Number of units in hidden layer 2.')
     parser.add_argument('--lr', type=float, default=0.01, help='Initial learning rate.')
     parser.add_argument('--dropout', type=float, default=0.0, help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset_str', type=str, default='gen_syn1', help='type of dataset.')
+    parser.add_argument('--dataset_str', type=str, default='cora', help='type of dataset.')
     gae_args = parser.parse_args()
 
     parser = argparse.ArgumentParser()
@@ -209,7 +209,7 @@ if __name__ == '__main__':
     parser.add_argument('--cf_lr', type=float, default=0.009, help='CF-explainer learning rate.')
     parser.add_argument('--dropout', type=float, default=0.2, help='Dropout rate (1 - keep probability).')
     parser.add_argument('--cf_optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset_str', type=str, default='gen_syn1', help='type of dataset.')
+    parser.add_argument('--dataset_str', type=str, default='cora', help='type of dataset.')
     parser.add_argument('--dataset_func', type=str, default='Planetoid', help='type of dataset.')
     parser.add_argument('--beta', type=float, default=0.1, help='beta variable')
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
