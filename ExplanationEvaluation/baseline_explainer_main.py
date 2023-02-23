@@ -104,7 +104,7 @@ def train_model(model, epochs, data):
 def main():
     s = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
     device = 'cpu'
-    dataset = 'citeseer'
+    dataset = 'pubmed'
     path = os.path.join(os.getcwd(), 'data', 'Planetoid')
     transformer = T.Compose([
         T.NormalizeFeatures(),
@@ -126,7 +126,7 @@ def main():
     output = model(train_dataset.x, train_dataset.edge_index)
     gnnexplainer = GNNExplainer(model, num_hops=4, epochs=100)
     ppf = 0
-    for node_idx in idx_test[-5:]:
+    for node_idx in idx_test[-2:]:
         try:
             sub_adj, sub_feat, sub_labels, node_dict, sub_edge_index = get_neighbourhood(
                 int(node_idx), train_dataset.edge_index, 4, train_dataset.x, output.argmax(dim=1))
@@ -200,7 +200,6 @@ def main():
                     a.append([node_dict[x[0].item()], node_dict[x[1].item()]])
                 b = np.array(a).T
                 b = torch.tensor(b, dtype=torch.int64)
-
                 expl_labels_p = out.argmax(dim=1)[b.reshape(-1)]
 
                 f = (expl_labels_p == output[b.reshape(-1)].argmax(dim=1)).sum() / expl_labels_p.__len__()

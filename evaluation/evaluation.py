@@ -23,7 +23,6 @@ def evaluate_cf_PN(
         f'{explainer_args.graph_result_dir}/'
         f'{explainer_args.dataset_str}/'
         f'cf_expl_{explainer_args.cf_expl}/'
-        f'pn_pp_{explainer_args.PN_PP}/'
         f'{explainer_args.algorithm}/'
         f'_{i}_sub_adj_{explainer_args.graph_result_name}_'
         f'{s}.png'
@@ -35,7 +34,6 @@ def evaluate_cf_PN(
         name=f'{explainer_args.graph_result_dir}/'
         f'{explainer_args.dataset_str}/'
         f'cf_expl_{explainer_args.cf_expl}/'
-        f'pn_pp_{explainer_args.PN_PP}/'
         f'{explainer_args.algorithm}/'
         f'_{i}_sub_adj_{explainer_args.graph_result_name}.png',
         plot_grey_edges=True
@@ -59,7 +57,6 @@ def evaluate_cf_PN(
                 f'{explainer_args.graph_result_dir}/'
                 f'{explainer_args.dataset_str}/'
                 f'cf_expl_{explainer_args.cf_expl}/'
-                f'pn_pp_{explainer_args.PN_PP}/'
                 f'{explainer_args.algorithm}/'
                 f'_{i}_counter_factual_{j}_'
                 f'_epoch_{x[3]}_'
@@ -73,7 +70,6 @@ def evaluate_cf_PN(
                 name=f'{explainer_args.graph_result_dir}/'
                      f'{explainer_args.dataset_str}/'
                      f'cf_expl_{explainer_args.cf_expl}/'
-                     f'pn_pp_{explainer_args.PN_PP}/'
                      f'{explainer_args.algorithm}/'
                      f'_{i}_counter_cf_adj_{explainer_args.graph_result_name}_'
                      f'{s}.png',
@@ -110,11 +106,10 @@ def evaluate_cf_PN(
         temp,
         cen_dist,
         pcf_example,
-        explainer_args.PN_PP,
+        explainer_args.cf_expl,
         f'{explainer_args.graph_result_dir}/'
         f'{explainer_args.dataset_str}/'
         f'cf_expl_{explainer_args.cf_expl}/'
-        f'pn_pp_{explainer_args.PN_PP}/'
         f'{explainer_args.algorithm}/'
         f'_{i}_counter_factual_{explainer_args.graph_result_name}_sub_graph_'
         f'{s}'
@@ -132,7 +127,6 @@ def evaluate_cf_PP(
         f'{explainer_args.graph_result_dir}/'
         f'{explainer_args.dataset_str}/'
         f'cf_expl_{explainer_args.cf_expl}/'
-        f'pn_pp_{explainer_args.PN_PP}/'
         f'{explainer_args.algorithm}/'
         f'_{i}_sub_adj_{explainer_args.graph_result_name}.png'
     )
@@ -143,7 +137,6 @@ def evaluate_cf_PP(
         name=f'{explainer_args.graph_result_dir}/'
         f'{explainer_args.dataset_str}/'
         f'cf_expl_{explainer_args.cf_expl}/'
-        f'pn_pp_{explainer_args.PN_PP}/'
         f'{explainer_args.algorithm}/'
         f'_{i}_sub_adj_{explainer_args.graph_result_name}.png',
         plot_grey_edges=True
@@ -167,7 +160,6 @@ def evaluate_cf_PP(
                 f'{explainer_args.graph_result_dir}/'
                 f'{explainer_args.dataset_str}/'
                 f'cf_expl_{explainer_args.cf_expl}/'
-                f'pn_pp_{explainer_args.PN_PP}/'
                 f'{explainer_args.algorithm}/'
                 f'_{i}_counter_factual_{j}_'
                 f'_epoch_{x[3]}_'
@@ -181,7 +173,6 @@ def evaluate_cf_PP(
                 f'{explainer_args.graph_result_dir}/'
                 f'{explainer_args.dataset_str}/'
                 f'cf_expl_{explainer_args.cf_expl}/'
-                f'pn_pp_{explainer_args.PN_PP}/'
                 f'{explainer_args.algorithm}/'
                 f'_{i}_cf_PP_adj_{j}_'
                 f'_epoch_{x[3]}_'
@@ -221,11 +212,10 @@ def evaluate_cf_PP(
         temp,
         cen_dist,
         pcf_example,
-        explainer_args.PN_PP,
+        explainer_args.cf_expl,
         f'{explainer_args.graph_result_dir}/'
         f'{explainer_args.dataset_str}/'
         f'cf_expl_{explainer_args.cf_expl}/'
-        f'pn_pp_{explainer_args.PN_PP}/'
         f'{explainer_args.algorithm}/'
         f'_{i}_counter_factual_{explainer_args.graph_result_name}_sub_graph_'
         f'{s}'

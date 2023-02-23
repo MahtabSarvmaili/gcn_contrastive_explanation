@@ -8,7 +8,7 @@ import os.path as osp
 import scipy.sparse as sp
 
 from torch_geometric.utils import to_dense_adj, train_test_split_edges, dense_to_sparse
-from torch_geometric.datasets import Planetoid, TUDataset, WebKB, GemsecDeezer, Amazon, Coauthor
+from torch_geometric.datasets import Planetoid, TUDataset
 import torch_geometric.transforms as T
 from torch_geometric.data import Data
 from gae.utils import preprocess_graph, mask_test_edges

@@ -26,15 +26,6 @@ def main(gae_args, explainer_args):
     data_AE = load_data_AE(explainer_args)
     # data =load_synthetic(gen_syn1, device=explainer_args.device)
     # data_AE = load_synthetic_AE(gen_syn1, device=explainer_args.device)
-    AE_threshold = {
-        'gen_syn1': 0.62,
-        'gen_syn2': 0.65,
-        'gen_syn3': 0.6,
-        'gen_syn4': 0.62,
-        'cora': 0.65,
-        'citeseer': 0.65,
-        'pubmed': 0.6,
-    }
     model = GCN(
         nfeat=data['feat_dim'],
         nhid=explainer_args.hidden,
@@ -76,7 +67,7 @@ def main(gae_args, explainer_args):
 
     idx_test = np.arange(0, data['n_nodes'])[data['test_mask'].cpu()]
     test_cf_examples = []
-    for i in idx_test[0:1]:
+    for i in idx_test[:1]:
         try:
             sub_adj, sub_feat, sub_labels, node_dict, sub_edge_index = get_neighbourhood(
                 int(i), data['edge_index'],
@@ -109,11 +100,8 @@ def main(gae_args, explainer_args):
                 num_classes=data['num_classes'],
                 beta=explainer_args.beta,
                 device=explainer_args.device,
-                AE_threshold=AE_threshold[explainer_args.dataset_str],
-                PN_PP=explainer_args.PN_PP,
                 cf_expl=explainer_args.cf_expl,
                 algorithm=explainer_args.algorithm,
-                edge_addition=explainer_args.edge_addition
             )
             explainer.cf_model.cuda()
             cf_example = explainer.explain(
@@ -123,7 +111,6 @@ def main(gae_args, explainer_args):
                 path=f'{explainer_args.graph_result_dir}/'
                 f'{explainer_args.dataset_str}/'
                 f'cf_expl_{explainer_args.cf_expl}/'
-                f'pn_pp_{explainer_args.PN_PP}/'
                 f'{explainer_args.algorithm}/'
                 f'_{i}_loss_.png'
             )
@@ -133,7 +120,6 @@ def main(gae_args, explainer_args):
                 if x[2].sum() < min_sum and x[2].sum()>0:
                     min_sum = x[2].sum()
                     min_idx = ii
-            plot_explanation_subgraph(cf_example[min_idx][2], cf_example[min_idx][8], new_idx, 'teeeeesssssttttt', plot_grey_edges=True)
             cf_example_p_list = []
             # stability evaluation
             sub_adj_p_list = swap_edges(sub_adj, sub_edge_index, 1)
@@ -153,11 +139,8 @@ def main(gae_args, explainer_args):
                     num_classes=data['num_classes'],
                     beta=explainer_args.beta,
                     device=explainer_args.device,
-                    AE_threshold=AE_threshold[explainer_args.dataset_str],
-                    PN_PP=explainer_args.PN_PP,
                     cf_expl=explainer_args.cf_expl,
                     algorithm=explainer_args.algorithm,
-                    edge_addition=explainer_args.edge_addition
                 )
                 explainer.cf_model.cuda()
                 cf_example_p = explainer.explain(
@@ -167,14 +150,13 @@ def main(gae_args, explainer_args):
                     path=f'{explainer_args.graph_result_dir}/'
                     f'{explainer_args.dataset_str}/'
                     f'cf_expl_{explainer_args.cf_expl}/'
-                    f'pn_pp_{explainer_args.PN_PP}/'
                     f'{explainer_args.algorithm}/'
                     f'_{i}_loss_.png'
                 )
                 cf_example_p_list.append(cf_example_p)
 
             test_cf_examples.append(cf_example)
-            if explainer_args.PN_PP == "PN":
+            if explainer_args.cf_expl is True:
                 evaluate_cf_PN(explainer_args, model, sub_feat, sub_adj, sub_labels, sub_edge_index, new_idx, i, cf_example, cf_example_p_list)
             else:
                 evaluate_cf_PP(explainer_args, model, sub_feat, sub_adj, sub_labels, sub_edge_index, new_idx, i, cf_example, cf_example_p_list)
@@ -213,14 +195,12 @@ if __name__ == '__main__':
     parser.add_argument('--dataset_func', type=str, default='Planetoid', help='type of dataset.')
     parser.add_argument('--beta', type=float, default=0.1, help='beta variable')
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
-    parser.add_argument('--edge-addition', type=bool, default=False, help='CF edge_addition')
     parser.add_argument('--graph_result_dir', type=str, default='./results', help='Result directory')
-    parser.add_argument('--algorithm', type=str, default='loss_PN_L1_L2', help='Result directory')
-    parser.add_argument('--graph_result_name', type=str, default='loss_PN_L1_L2', help='Result name')
-    parser.add_argument('--cf_train_loss', type=str, default='loss_PN_L1_L2',
+    parser.add_argument('--algorithm', type=str, default='loss_PN_AE', help='Result directory')
+    parser.add_argument('--graph_result_name', type=str, default='loss_PN_AE', help='Result name')
+    parser.add_argument('--cf_train_loss', type=str, default='loss_PN_AE',
                         help='CF explainer loss function')
-    parser.add_argument('--PN_PP', type=str, default="PP", help='CF explainer loss function')
-    parser.add_argument('--cf_expl', type=bool, default=False, help='CF explainer loss function')
+    parser.add_argument('--cf_expl', type=bool, default=True, help='CF explainer loss function')
     parser.add_argument('--n_momentum', type=float, default=0.5, help='Nesterov momentum')
     explainer_args = parser.parse_args()
 
@@ -233,13 +213,11 @@ if __name__ == '__main__':
     if os.listdir(f'{explainer_args.graph_result_dir}/'
                   f'{explainer_args.dataset_str}/'
                   f'cf_expl_{explainer_args.cf_expl}/'
-                  f'pn_pp_{explainer_args.PN_PP}/'
                   ).__contains__(explainer_args.algorithm) is False:
         os.mkdir(
             f'{explainer_args.graph_result_dir}/'
             f'{explainer_args.dataset_str}/'
             f'cf_expl_{explainer_args.cf_expl}/'
-            f'pn_pp_{explainer_args.PN_PP}/'
             f'{explainer_args.algorithm}'
         )
     main(gae_args, explainer_args)

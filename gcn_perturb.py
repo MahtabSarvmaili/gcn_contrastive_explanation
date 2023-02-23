@@ -70,7 +70,7 @@ class GCNSyntheticPerturb(nn.Module):
 
     def __init__(
             self, nfeat, nhid, nout, nclass, adj, dropout,
-            beta, gamma=0.09, kappa=10, psi=0.01, AE_threshold=0.5, PN_PP="PN", cf_expl=True, edge_addition=False, device='cuda'
+            beta, gamma=0.09, kappa=10, psi=0.01, cf_expl=True, device='cuda'
     ):
         # the best gamma and psi for prototype explanation are gamma=0.01, kappa=10, psi=0.09
         # the best gamma and psi for CF explanation are gamma=0.09, kappa=10, psi=0.01
@@ -81,13 +81,11 @@ class GCNSyntheticPerturb(nn.Module):
         self.beta = beta
         self.device = device
         self.num_nodes = self.adj.shape[0]
-        self.AE_threshold = AE_threshold
         self.kappa = torch.tensor(kappa).cuda()
         self.beta = torch.tensor(beta).cuda()
         self.const = torch.tensor(0.0, device=device)
         self.gamma = torch.tensor(gamma, device=device)
         self.psi_l1 = torch.tensor(psi, device=device)
-        self.PN_PP = PN_PP
         self.cf_expl = cf_expl
         # P_hat needs to be symmetric ==>
         # learn vector representing entries in upper/lower triangular matrix and use to populate P_hat later
@@ -111,7 +109,7 @@ class GCNSyntheticPerturb(nn.Module):
 
     def __AE_recons__(self, graph_AE, x, cf_adj):
         cf_adj_sparse = dense_to_sparse(cf_adj)[0]
-        reconst_P = (torch.sigmoid(graph_AE.forward(x, cf_adj_sparse)) <= self.AE_threshold).float()
+        reconst_P = (torch.sigmoid(graph_AE.forward(x, cf_adj_sparse)) < 0.5).float()
         l2_AE = torch.dist(cf_adj, reconst_P, p=2)
         return l2_AE
 
@@ -157,9 +155,6 @@ class GCNSyntheticPerturb(nn.Module):
     def forward_prediction(self, x, logits=True):
         # Same as forward but uses P instead of P_hat ==> non-differentiable
         # but needed for actual predictions
-        # if self.PN_PP == "PP":
-        #     self.P = (torch.sigmoid(self.P_hat_symm) < 0.5).float()  # threshold P_hat
-        # else:
         self.P = (torch.sigmoid(self.P_hat_symm) >= 0.5).float()
             # threshold P_hat
 
@@ -214,9 +209,6 @@ class GCNSyntheticPerturb(nn.Module):
     def encode_prediction(self, x):
         # Same as forward but uses P instead of P_hat ==> non-differentiable
         # but needed for actual predictions
-        # if self.PN_PP == "PP":
-        #     self.P = (torch.sigmoid(self.P_hat_symm) < 0.5).float()  # threshold P_hat
-        # else:
         self.P = (torch.sigmoid(self.P_hat_symm) >= 0.5).float()  # threshold P_hat
 
         A_tilde = self.P * self.adj #+ torch.eye(self.num_nodes).cuda()
@@ -256,7 +248,7 @@ class GCNSyntheticPerturb(nn.Module):
 
     def loss__(self, graph_AE, x, output, y_orig_onehot, l1=1, l2=1, ae=1, dist=1):
         closs = 0
-        if self.PN_PP == "PP":
+        if self.cf_expl is False:
             loss_perturb, PLoss = pertinent_positive_loss(output, y_orig_onehot, self.const, self.kappa)
         else:
             loss_perturb, PLoss = pertinent_negative_loss(output, y_orig_onehot, self.const, self.kappa)
@@ -283,8 +275,7 @@ class GCNSyntheticPerturb(nn.Module):
         L1 = self.__L1__()
         L2 = self.__L2__()
 
-
-        if self.PN_PP == 'PP':
+        if self.cf_expl is False:
             pred_same = (y_pred_new_actual != y_pred_orig).float()
             loss_pred = F.nll_loss(output, y_pred_orig)
 

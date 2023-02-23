@@ -7,8 +7,8 @@ import numpy as np
 from utils import normalize_adj
 import networkx as nx
 
-# torch.manual_seed(0)
-# np.random.seed(0)
+torch.manual_seed(0)
+np.random.seed(0)
 
 def gen_graph(nodes, edge_list):
     G = nx.Graph()
@@ -38,7 +38,7 @@ def graph_evaluation_metrics(
         cf_examples,
         cen_dist,
         pcf_example,
-        PN_PP,
+        cf_expl,
         name='',
         device='cuda'
 ):
@@ -91,7 +91,7 @@ def graph_evaluation_metrics(
         res.append([f, s, r, l, lpur, lgd, l1, l2, ae, ppf, cl, bt, p])
 
 
-    if PN_PP=='PN':
+    if cf_expl is True:
         cf_expl_sparsity = np.array(cf_expl_sparsity)
         max_selected_fids = np.array(cf_expl_fids)[cf_expl_sparsity.argmin()]
     else:

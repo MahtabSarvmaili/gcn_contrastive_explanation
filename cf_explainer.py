@@ -21,8 +21,7 @@ class CFExplainer:
 
     def __init__(
             self, model, graph_ae, sub_adj, sub_feat, n_hid, dropout, lr, n_momentum, cf_optimizer,
-            sub_labels, y_pred_orig, num_classes, beta, device, AE_threshold, PN_PP="PN", cf_expl=True, algorithm='cfgnn',
-            edge_addition=False, kappa=10
+            sub_labels, y_pred_orig, num_classes, beta, device, cf_expl=True, algorithm='cfgnn', kappa=10
     ):
 
         super(CFExplainer, self).__init__()
@@ -41,11 +40,10 @@ class CFExplainer:
         self.beta = beta
         self.device = device
         self.kappa = kappa
-        self.edge_addition = edge_addition
         self.algorithm = algorithm
         self.cf_expl = cf_expl
         self.losses = {
-            'loss_total':[], 'loss_perturb':[], 'loss_graph_dist':[], 'L1':[], 'L2':[], 'l2_AE':[]
+            'loss_total': [], 'loss_perturb': [], 'loss_graph_dist': [], 'L1': [], 'L2': [], 'l2_AE': []
         }
         self.params = {
             'loss_PN': (0,0,0,0),
@@ -59,7 +57,7 @@ class CFExplainer:
         self.cf_model = GCNSyntheticPerturb(
             self.sub_feat.shape[1], n_hid, n_hid,
             self.num_classes, self.sub_adj, dropout,
-            beta, AE_threshold=AE_threshold, PN_PP=PN_PP, cf_expl=self.cf_expl, edge_addition=edge_addition
+            beta, self.cf_expl
         )
 
         self.cf_model.load_state_dict(self.model.state_dict(), strict=False)
@@ -100,7 +98,7 @@ class CFExplainer:
                 output[self.new_idx], self.y_pred_orig, y_pred_new_actual
             )
         elif self.algorithm.__contains__('nll'):
-            l1, l2, ae, dist = self.params[self.algorithm.replace('nll','')]
+            l1, l2, ae, dist = self.params[self.algorithm.replace('nll', '')]
             loss_total, loss_perturb, loss_graph_dist, L1, L2, l2_AE, cf_adj, PLoss = self.cf_model.loss__nll(
                 self.graph_AE, self.sub_feat, output[self.new_idx], self.y_pred_orig, y_pred_new_actual,
                 l1=l1, l2=l2, ae=ae, dist=dist
@@ -159,7 +157,7 @@ class CFExplainer:
                     L2, l2_AE,
                     PLoss
                 ]
-        return cf_stats, loss_perturb.item()
+        return cf_stats, loss_total.item()
 
     def explain(
             self,

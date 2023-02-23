@@ -1,18 +1,18 @@
 from __future__ import division
 from __future__ import print_function
 import os, sys
-
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
 from torch_geometric.utils import dense_to_sparse
 import numpy as np
 from sklearn.manifold import TSNE
 import matplotlib
 import matplotlib.pyplot as plt
-from distinctipy import distinctipy
 import torch
 import networkx as nx
 
 np.random.seed(0)
+torch.manual_seed(0)
+
 matplotlib.use('Agg')
 
 colors = ['orange', 'green', 'blue', 'maroon', 'brown', 'darkslategray', 'paleturquoise', 'darksalmon',
@@ -39,9 +39,6 @@ def plot_explanation_subgraph(adj, labels, node_idx, name, plot_grey_edges=True)
         label2nodes.append([])
     for i in range(nmb_nodes):
         label2nodes[labels[i]].append(i)
-    n_nodes = np.unique(edge_index.reshape(-1)).__len__()
-
-
     G = nx.Graph()
     G.add_nodes_from(np.unique(edge_index.reshape(-1)))
     G.add_edges_from(edge_list)
