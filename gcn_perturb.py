@@ -70,7 +70,7 @@ class GCNSyntheticPerturb(nn.Module):
 
     def __init__(
             self, nfeat, nhid, nout, nclass, adj, dropout,
-            beta, gamma=0.09, kappa=10, psi=0.01, cf_expl=True, device='cuda'
+            beta, cf_expl=True, gamma=0.09, kappa=10, psi=0.01, device='cuda'
     ):
         # the best gamma and psi for prototype explanation are gamma=0.01, kappa=10, psi=0.09
         # the best gamma and psi for CF explanation are gamma=0.09, kappa=10, psi=0.01
@@ -109,7 +109,8 @@ class GCNSyntheticPerturb(nn.Module):
 
     def __AE_recons__(self, graph_AE, x, cf_adj):
         cf_adj_sparse = dense_to_sparse(cf_adj)[0]
-        reconst_P = (torch.sigmoid(graph_AE.forward(x, cf_adj_sparse)) < 0.5).float()
+        # the sigmoid is already applied in the reconstruction
+        reconst_P = (graph_AE.forward(x, cf_adj_sparse) > 0.5).float()
         l2_AE = torch.dist(cf_adj, reconst_P, p=2)
         return l2_AE
 

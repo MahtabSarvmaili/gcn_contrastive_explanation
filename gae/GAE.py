@@ -8,13 +8,14 @@ torch.manual_seed(0)
 np.random.seed(0)
 
 
+# to achieve high accuracy we need to train the GAE with tracing precision and auc 
 def gae(args, data):
 
     print("Using {} dataset".format(args.dataset_str))
     model = DeepVGAE(data['feat_dim'], args.hidden1, args.hidden2).to(args.device)
     optimizer = Adam(model.parameters(), lr=args.lr)
     prev_prec = 0
-    patience = 15
+    patience = 10
     trigger_times = 0
     for epoch in range(args.epochs):
         model.train()
