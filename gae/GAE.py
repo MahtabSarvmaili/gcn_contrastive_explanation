@@ -8,7 +8,7 @@ torch.manual_seed(0)
 np.random.seed(0)
 
 
-# to achieve high accuracy we need to train the GAE with tracing precision and auc 
+# to achieve high accuracy we need to train the GAE with tracing precision and auc
 def gae(args, data):
 
     print("Using {} dataset".format(args.dataset_str))

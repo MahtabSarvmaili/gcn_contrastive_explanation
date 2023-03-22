@@ -57,7 +57,7 @@ class CFExplainer:
         self.cf_model = GCNSyntheticPerturb(
             self.sub_feat.shape[1], n_hid, n_hid,
             self.num_classes, self.sub_adj, dropout,
-            beta, self.cf_expl, 0.1,
+            beta, self.cf_expl, 0.1, self.kappa, 0.09
         )
 
         self.cf_model.load_state_dict(self.model.state_dict(), strict=False)
