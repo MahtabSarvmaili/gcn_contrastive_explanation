@@ -8,6 +8,7 @@ import os.path as osp
 import scipy.sparse as sp
 
 from torch_geometric.utils import to_dense_adj, train_test_split_edges, dense_to_sparse
+from sklearn.model_selection import StratifiedKFold
 from torch_geometric.datasets import Planetoid, TUDataset
 import torch_geometric.transforms as T
 from torch_geometric.data import Data
@@ -17,6 +18,24 @@ from data.gengraph import gen_syn1, preprocess_input_graph
 import networkx as nx
 torch.manual_seed(0)
 np.random.seed(0)
+
+
+def __k_fold__(x, y, folds, device='cuda'):
+    skf = StratifiedKFold(folds, shuffle=True, random_state=12345)
+
+    test_indices, train_indices = [], []
+    for _, idx in skf.split(torch.zeros(len(x)), y.cpu()):
+        test_indices.append(torch.from_numpy(idx).to(torch.long).to(device))
+
+    val_indices = [test_indices[i - 1] for i in range(folds)]
+
+    for i in range(folds):
+        train_mask = torch.ones(len(x), dtype=torch.bool, device=device)
+        train_mask[test_indices[i]] = 0
+        train_mask[val_indices[i]] = 0
+        train_indices.append(train_mask.nonzero(as_tuple=False).view(-1))
+
+    return train_indices, test_indices, val_indices
 
 
 def __load__data__(dataset_func, dataset_str, transformer):

@@ -3,7 +3,7 @@ from __future__ import print_function
 import numpy as np
 import torch
 from torch.optim import Adam
-from gae.torchgeometric_ae import DeepVGAE
+from gae.torchgeometric_vgae import DeepVGAE
 torch.manual_seed(0)
 np.random.seed(0)
 

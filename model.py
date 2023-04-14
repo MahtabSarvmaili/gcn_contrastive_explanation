@@ -51,9 +51,6 @@ def train(
         val_mask,
         dataset_name=''
 ):
-    weights = compute_class_weight(class_weight='balanced', classes=np.unique(labels[train_mask].cpu().numpy()),
-                                      y=labels[train_mask].cpu().numpy())
-    weights = torch.FloatTensor(weights).cuda()
     patience = 5
     trigger_times = 0
     prev_loss = np.inf
