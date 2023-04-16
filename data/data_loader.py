@@ -139,17 +139,15 @@ def load_data_AE(args):
     transformer = T.Compose([
         T.ToDevice(args.device),
         T.NormalizeFeatures(),
+        T.RandomLinkSplit(num_val=0, num_test=0.2, split_labels=True, is_undirected=True)
     ])
-    dataset = __load__data__(args.dataset_func, args.dataset_str, transformer)
-    all_edge_index = dataset.edge_index
-    dt = train_test_split_edges(dataset, 0.05, 0.1)
-    dataset.train_mask = dataset.test_mask = dataset.val_mask = None
+    train_data, _, test_data = __load__data__(args.dataset_func, args.dataset_str, transformer)
     return {
-        'dataset':dt,
-        'n_nodes': dt.num_nodes,
-        'feat_dim': dt.num_features,
-        'num_classes': len(dt.y.unique()),
-        'all_edge_index':all_edge_index
+        'train_data': train_data,
+        'test_data': test_data,
+        'n_nodes': train_data.num_nodes,
+        'feat_dim': train_data.num_features,
+        'num_classes': len(train_data.y.unique())
     }
 
 
