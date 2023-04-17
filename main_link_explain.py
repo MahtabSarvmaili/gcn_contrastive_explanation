@@ -5,12 +5,56 @@ import torch
 from data.data_loader import load_data, load_synthetic, load_synthetic_AE, load_data_AE
 from torch.optim import Adam
 from gae.torchgeometric_gae import GAE
-
-
-# torch.manual_seed(0)
-# np.random.seed(0)
-
+import torch.nn.functional as F
+from torch_geometric.utils import negative_sampling
+from sklearn.metrics import roc_auc_score
 sys.path.append('../..')
+
+
+def get_link_labels(pos_edge_index, neg_edge_index, device):
+    # returns a tensor:
+    # [1,1,1,1,...,0,0,0,0,0,..] with the number of ones is equel to the lenght of pos_edge_index
+    # and the number of zeros is equal to the length of neg_edge_index
+    E = pos_edge_index.size(1) + neg_edge_index.size(1)
+    link_labels = torch.zeros(E, dtype=torch.float, device=device)
+    link_labels[:pos_edge_index.size(1)] = 1.
+    return link_labels
+
+
+def train(model, data, optimizer):
+    model.train()
+
+    neg_edge_index = negative_sampling(
+        edge_index=data.train_pos_edge_index,  # positive edges
+        num_nodes=data.num_nodes,  # number of nodes
+        num_neg_samples=data.train_pos_edge_index.size(1))  # number of neg_sample equal to number of pos_edges
+
+    optimizer.zero_grad()
+
+    z = model.encode(data.x, data.train_pos_edge_index)  # encode
+    link_logits = model.decode(z, data.train_pos_edge_index, neg_edge_index)  # decode
+
+    link_labels = get_link_labels(data.train_pos_edge_index, neg_edge_index, device=gae_args.device)
+    loss = F.binary_cross_entropy_with_logits(link_logits, link_labels)
+    loss.backward()
+    optimizer.step()
+
+    return loss
+
+
+@torch.no_grad()
+def test(model, data, device='cuda'):
+    model.eval()
+    perfs = []
+    for prefix in ["val", "test"]:
+        pos_edge_index = data[f'{prefix}_pos_edge_index'].to(device)
+        neg_edge_index = data[f'{prefix}_neg_edge_index'].to(device)
+        z = model.encode(data.x, data.train_pos_edge_index)  # encode train
+        link_logits = model.decode(z, pos_edge_index, neg_edge_index)  # decode test or val
+        link_probs = link_logits.sigmoid()  # apply sigmoid
+        link_labels = get_link_labels(pos_edge_index, neg_edge_index, gae_args.device)  # get link
+        perfs.append(roc_auc_score(link_labels.cpu(), link_probs.cpu()))  # compute roc_auc score
+    return perfs
 
 
 def main(gae_args):
@@ -23,44 +67,16 @@ def main(gae_args):
     print("Using {} dataset".format(gae_args.dataset_str))
     model = GAE(data_AE['feat_dim'], gae_args.hidden1, gae_args.hidden2).to(gae_args.device)
     optimizer = Adam(model.parameters(), lr=gae_args.lr)
-    prev_prec = 0
-    patience = 3
-    trigger_times = 0
-    for epoch in range(gae_args.epochs):
-        model.train()
-        optimizer.zero_grad()
-
-        loss = model.loss(
-            data_AE['train_data'].x,
-            data_AE['train_data'].train_pos_edge_index,
-            data_AE['train_data'].train_neg_edge_index
-        )
-        loss.backward()
-        optimizer.step()
-        if epoch % 2 == 0:
-
-            model.eval()
-            roc_auc, ap = model.single_test(data_AE['dataset'].x,
-                                            data_AE['dataset'].train_pos_edge_index,
-                                            data_AE['dataset'].test_pos_edge_index,
-                                            data_AE['dataset'].test_neg_edge_index)
-            if prev_prec > ap:
-                trigger_times += 1
-                print('Trigger Times:', trigger_times)
-
-                if trigger_times >= patience:
-                    print('Early stopping!\nStart to test process.')
-                    print("Epoch {} - Loss: {} ROC_AUC: {} Precision: {}".format(epoch, loss.cpu().item(), roc_auc, ap))
-                    return model
-            else:
-                print("Epoch {} - Loss: {} ROC_AUC: {} Precision: {}".format(epoch, loss.cpu().item(), roc_auc, ap))
-                trigger_times = 0
-            prev_prec = ap
-    print("Explanation step:")
-
-    torch.cuda.empty_cache()
-    gc.collect()
-
+    best_val_perf = test_perf = 0
+    for epoch in range(1, 101):
+        train_loss = train(model, data_AE['dataset'], optimizer)
+        val_perf, tmp_test_perf = test(model, data_AE['dataset'])
+        if val_perf > best_val_perf:
+            best_val_perf = val_perf
+            test_perf = tmp_test_perf
+        log = 'Epoch: {:03d}, Loss: {:.4f}, Val: {:.4f}, Test: {:.4f}'
+        if epoch % 10 == 0:
+            print(log.format(epoch, train_loss, best_val_perf, test_perf))
 
 
 if __name__ == '__main__':
@@ -85,7 +101,7 @@ if __name__ == '__main__':
     parser.add_argument('--cf_lr', type=float, default=0.009, help='CF-explainer learning rate.')
     parser.add_argument('--dropout', type=float, default=0.2, help='Dropout rate (1 - keep probability).')
     parser.add_argument('--cf_optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset_str', type=str, default='cora', help='type of dataset.')
+    parser.add_argument('--dataset_str', type=str, default='pubmed', help='type of dataset.')
     parser.add_argument('--dataset_func', type=str, default='Planetoid', help='type of dataset.')
     parser.add_argument('--beta', type=float, default=0.1, help='beta variable')
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
