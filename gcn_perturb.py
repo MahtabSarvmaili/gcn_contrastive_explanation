@@ -7,7 +7,6 @@ from torch.nn.parameter import Parameter
 from torch_geometric.utils import dense_to_sparse
 from utils import get_degree_matrix, create_symm_matrix_from_vec, create_vec_from_symm_matrix
 from gae.utils import preprocess_graph
-from clustering.dmon import DMoN
 # torch.manual_seed(0)
 # np.random.seed(0)
 from layers import GraphConvolution
