@@ -5,6 +5,7 @@ import torch
 from data.data_loader import load_data, load_synthetic, load_synthetic_AE, load_data_AE
 from torch.optim import Adam
 from gae.torchgeometric_gae import GAE
+from gae.torchgeometric_vgae import DeepVGAE
 
 
 # torch.manual_seed(0)
@@ -23,40 +24,26 @@ def main(gae_args):
     print("Using {} dataset".format(gae_args.dataset_str))
     model = GAE(data_AE['feat_dim'], gae_args.hidden1, gae_args.hidden2).to(gae_args.device)
     optimizer = Adam(model.parameters(), lr=gae_args.lr)
-    prev_prec = 0
-    patience = 3
-    trigger_times = 0
+
     for epoch in range(gae_args.epochs):
         model.train()
         optimizer.zero_grad()
 
         loss = model.loss(
             data_AE['train_data'].x,
-            data_AE['train_data'].train_pos_edge_index,
-            data_AE['train_data'].train_neg_edge_index
+            data_AE['train_data'].edge_label_index,
         )
         loss.backward()
         optimizer.step()
-        if epoch % 2 == 0:
+        if epoch % 5 == 0:
 
             model.eval()
-            roc_auc, ap = model.single_test(data_AE['dataset'].x,
-                                            data_AE['dataset'].train_pos_edge_index,
-                                            data_AE['dataset'].test_pos_edge_index,
-                                            data_AE['dataset'].test_neg_edge_index)
-            if prev_prec > ap:
-                trigger_times += 1
-                print('Trigger Times:', trigger_times)
-
-                if trigger_times >= patience:
-                    print('Early stopping!\nStart to test process.')
-                    print("Epoch {} - Loss: {} ROC_AUC: {} Precision: {}".format(epoch, loss.cpu().item(), roc_auc, ap))
-                    return model
-            else:
-                print("Epoch {} - Loss: {} ROC_AUC: {} Precision: {}".format(epoch, loss.cpu().item(), roc_auc, ap))
-                trigger_times = 0
-            prev_prec = ap
+            roc_auc, ap = model.single_test(data_AE['train_data'].x,
+                                            data_AE['train_data'].edge_label_index,
+                                            data_AE['test_data'].edge_label_index)
+            print("Epoch {} - Loss: {} ROC_AUC: {} Precision: {}".format(epoch, loss.cpu().item(), roc_auc, ap))
     print("Explanation step:")
+
 
     torch.cuda.empty_cache()
     gc.collect()
@@ -65,10 +52,10 @@ def main(gae_args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--device', type=str, default='cuda', help='torch device.')
-    parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train.')
-    parser.add_argument('--hidden1', type=int, default=32, help='Number of units in hidden layer 1.')
-    parser.add_argument('--hidden2', type=int, default=16, help='Number of units in hidden layer 2.')
+    parser.add_argument('--device', type=str, default='cpu', help='torch device.')
+    parser.add_argument('--epochs', type=int, default=200, help='Number of epochs to train.')
+    parser.add_argument('--hidden1', type=int, default=128, help='Number of units in hidden layer 1.')
+    parser.add_argument('--hidden2', type=int, default=64, help='Number of units in hidden layer 2.')
     parser.add_argument('--lr', type=float, default=0.01, help='Initial learning rate.')
     parser.add_argument('--dropout', type=float, default=0.0, help='Dropout rate (1 - keep probability).')
     parser.add_argument('--dataset_str', type=str, default='cora', help='type of dataset.')

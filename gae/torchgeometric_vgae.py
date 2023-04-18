@@ -45,7 +45,7 @@ class DeepVGAE(VGAE):
         all_edge_index_tmp, _ = remove_self_loops(all_edge_index)
         all_edge_index_tmp, _ = add_self_loops(all_edge_index_tmp)
 
-        neg_edge_index = negative_sampling(all_edge_index_tmp, z.size(0), pos_edge_index.size(1))
+        neg_edge_index = negative_sampling(all_edge_index, z.size(0), pos_edge_index.size(1))
         neg_loss = -torch.log(1 - self.decoder(z, neg_edge_index, sigmoid=True) + 1e-15).mean()
 
         kl_loss = 1 / x.size(0) * self.kl_loss()

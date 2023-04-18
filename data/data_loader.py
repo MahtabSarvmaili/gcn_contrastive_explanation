@@ -139,7 +139,7 @@ def load_data_AE(args):
     transformer = T.Compose([
         T.ToDevice(args.device),
         T.NormalizeFeatures(),
-        T.RandomLinkSplit(num_val=0, num_test=0.2, split_labels=True, is_undirected=True)
+        T.RandomLinkSplit(num_val=0, num_test=0.1, split_labels=False, is_undirected=True)
     ])
     train_data, _, test_data = __load__data__(args.dataset_func, args.dataset_str, transformer)
     return {
