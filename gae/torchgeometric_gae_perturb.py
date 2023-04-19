@@ -8,28 +8,40 @@ from torch_sparse import sum as sparsesum
 from torch.nn.parameter import Parameter
 from torch_geometric.utils import dense_to_sparse
 from utils import get_degree_matrix, create_symm_matrix_from_vec, create_vec_from_symm_matrix
+from torch_geometric.nn.conv import MessagePassing
+from torch_geometric.utils.num_nodes import maybe_num_nodes
+from torch_geometric.utils import add_remaining_self_loops
+from torch_scatter import scatter_add
 from gae.utils import preprocess_graph
 # torch.manual_seed(0)
 # np.random.seed(0)
 from layers import GraphConvolution
 
 
-def gcn_norm(edge_index, improved=False, add_self_loops=True, dtype=None):
+def gcn_norm(edge_index, edge_weight=None, num_nodes=None, improved=False,
+             add_self_loops=True, flow="source_to_target", dtype=None):
 
     fill_value = 2. if improved else 1.
 
-    if isinstance(edge_index, SparseTensor):
-        adj_t = edge_index
-        if not adj_t.has_value():
-            adj_t = adj_t.fill_value(1., dtype=dtype)
-        if add_self_loops:
-            adj_t = fill_diag(adj_t, fill_value)
-        deg = sparsesum(adj_t, dim=1)
-        deg_inv_sqrt = deg.pow_(-0.5)
-        deg_inv_sqrt.masked_fill_(deg_inv_sqrt == float('inf'), 0.)
-        adj_t = mul(adj_t, deg_inv_sqrt.view(-1, 1))
-        adj_t = mul(adj_t, deg_inv_sqrt.view(1, -1))
-        return adj_t
+    assert flow in ["source_to_target", "target_to_source"]
+    num_nodes = maybe_num_nodes(edge_index, num_nodes)
+
+    if edge_weight is None:
+        edge_weight = torch.ones((edge_index.size(1), ), dtype=dtype,
+                                 device=edge_index.device)
+
+    if add_self_loops:
+        edge_index, tmp_edge_weight = add_remaining_self_loops(
+            edge_index, edge_weight, fill_value, num_nodes)
+        assert tmp_edge_weight is not None
+        edge_weight = tmp_edge_weight
+    edge_weight = edge_weight.to(edge_index.device)
+    row, col = edge_index[0], edge_index[1]
+    idx = col if flow == "source_to_target" else row
+    deg = scatter_add(edge_weight, idx, dim=0, dim_size=num_nodes)
+    deg_inv_sqrt = deg.pow_(-0.5)
+    deg_inv_sqrt.masked_fill_(deg_inv_sqrt == float('inf'), 0)
+    return edge_index, deg_inv_sqrt[row] * edge_weight * deg_inv_sqrt[col]
 
 
 
@@ -57,7 +69,7 @@ def cross_loss(output, y):
     return closs
 
 
-class GraphConvolutionPerturb(nn.Module):
+class GraphConvolutionPerturb(MessagePassing):
 
     def __init__(self, in_features, out_features, bias=True):
         super(GraphConvolutionPerturb, self).__init__()
@@ -69,13 +81,15 @@ class GraphConvolutionPerturb(nn.Module):
         else:
             self.register_parameter('bias', None)
 
-    def forward(self, input, adj):
-        support = torch.mm(input, self.weight)
-        output = torch.spmm(adj, support)
+    def forward(self, x, edge_index, edge_weight):
+
+        support = torch.mm(x, self.weight)
+        out = self.propagate(edge_index, x=support, edge_weight=edge_weight,
+                             size=None)
         if self.bias is not None:
-            return output + self.bias
+            out += self.bias
         else:
-            return output
+            return out
 
     def __repr__(self):
         return self.__class__.__name__ + ' (' \
@@ -89,18 +103,17 @@ class GCNSyntheticPerturb(nn.Module):
     """
 
     def __init__(
-            self, nfeat, nhid, nout, nclass, adj, dropout,
-            beta, cf_expl=True, gamma=0.09, kappa=10, psi=0.01, device='cuda'
+            self, nfeat, nhid, nout, edge_index, num_nodes, beta=0.1,
+            cf_expl=True, gamma=0.09, kappa=10, psi=0.01, device='cuda'
     ):
         # the best gamma and psi for prototype explanation are gamma=0.01, kappa=10, psi=0.09
         # the best gamma and psi for CF explanation are gamma=0.09, kappa=10, psi=0.01
 
         super(GCNSyntheticPerturb, self).__init__()
-        self.adj = adj
-        self.nclass = nclass
+        self.edge_index = edge_index
+        self.num_nodes = num_nodes
         self.beta = beta
         self.device = device
-        self.num_nodes = self.adj.shape[0]
         self.kappa = torch.tensor(kappa).cuda()
         self.beta = torch.tensor(beta).cuda()
         self.const = torch.tensor(0.0, device=device)
@@ -109,17 +122,21 @@ class GCNSyntheticPerturb(nn.Module):
         self.cf_expl = cf_expl
         # P_hat needs to be symmetric ==>
         # learn vector representing entries in upper/lower triangular matrix and use to populate P_hat later
-        self.P_vec_size = int((self.num_nodes * self.num_nodes - self.num_nodes) / 2) + self.num_nodes
+        self.P_vec_size = (edge_index.size(1))
 
-        self.P_vec = Parameter(torch.FloatTensor(torch.ones(self.P_vec_size)))
+        self.P_vec = Parameter(torch.FloatTensor(torch.zeros((self.P_vec_size,))))
 
-        self.reset_parameters()
+        self.P_vec.to(device)
+        # self.reset_parameters()
 
         self.gc1 = GraphConvolutionPerturb(nfeat, nhid)
-        self.gc2 = GraphConvolutionPerturb(nhid, nhid)
-        self.gc3 = GraphConvolution(nhid, nout)
-        self.lin = nn.Linear(nhid + nhid + nout, nclass)
-        self.dropout = dropout
+        self.gc2 = GraphConvolutionPerturb(nhid, nout)
+
+    def __test__(self, x):
+        edge_index, edge_weight = gcn_norm(self.edge_index, self.P_vec, self.num_nodes)
+        x = self.gc1(x, edge_index, edge_weight)
+        x = F.relu(x)
+        x = self.gc2(x, edge_index, edge_weight)
 
     def __L1__(self):
         return torch.linalg.norm(self.P_hat_symm, ord=1)
@@ -141,37 +158,12 @@ class GCNSyntheticPerturb(nn.Module):
         # Think more about how to initialize this
         torch.sub(self.P_vec, eps)
 
-    def forward(self, x, sub_adj, logits=True):
-        self.sub_adj = sub_adj
-        # Same as normalize_adj in utils.py except includes P_hat in A_tilde
-        self.P_hat_symm = create_symm_matrix_from_vec(self.P_vec, self.num_nodes)  # Ensure symmetry
-
-        A_tilde = torch.FloatTensor(self.num_nodes, self.num_nodes)
-        A_tilde.requires_grad = True
-
-        # Learn P_hat that gets multiplied element-wise with adj -- only edge deletions
-        # Use sigmoid to bound P_hat in [0,1]
-        # no need for self loop since we normalized the adjacency map
-        A_tilde = torch.sigmoid(self.P_hat_symm) * self.sub_adj.cuda() #+ torch.eye(self.num_nodes).cuda()
-
-        D_tilde = get_degree_matrix(A_tilde).detach()  # Don't need gradient of this
-        # Raise to power -1/2, set all infs to 0s
-        D_tilde_exp = D_tilde ** (-1 / 2)
-        D_tilde_exp[torch.isinf(D_tilde_exp)] = 0
-
-        # Create norm_adj = (D + I)^(-1/2) * (A + I) * (D + I) ^(-1/2)
-        norm_adj = torch.mm(torch.mm(D_tilde_exp, A_tilde), D_tilde_exp)
-
-        x1 = F.relu(self.gc1(x, norm_adj))
-        x1 = F.dropout(x1, self.dropout, training=self.training)
-        x2 = F.relu(self.gc2(x1, norm_adj))
-        x2 = F.dropout(x2, self.dropout, training=self.training)
-        x3 = self.gc3(x2, norm_adj)
-        x = self.lin(torch.cat((x1, x2, x3), dim=1))
-        if logits:
-            return F.log_softmax(x, dim=1)
-        else:
-            return F.softmax(x, dim=1)
+    def forward(self, x, logits=True):
+        edge_index, edge_weight = gcn_norm(self.edge_index, self.P_vec.sigmoid(), self.num_nodes)
+        x = self.gc1(x, edge_index, edge_weight)
+        x = F.relu(x)
+        x = self.gc2(x, edge_index, edge_weight)
+        return x
 
     def forward_prediction(self, x, logits=True):
         # Same as forward but uses P instead of P_hat ==> non-differentiable

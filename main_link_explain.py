@@ -8,6 +8,7 @@ from gae.torchgeometric_gae import GAE
 import torch.nn.functional as F
 from torch_geometric.utils import negative_sampling
 from sklearn.metrics import roc_auc_score
+from gae.torchgeometric_gae_perturb import GCNSyntheticPerturb
 sys.path.append('../..')
 
 
@@ -78,6 +79,11 @@ def main(gae_args):
         if epoch % 10 == 0:
             print(log.format(epoch, train_loss, best_val_perf, test_perf))
 
+    explainer = GCNSyntheticPerturb(
+        data_AE['feat_dim'], gae_args.hidden1, gae_args.hidden2, data_AE['dataset'].train_pos_edge_index, data_AE['n_nodes']
+    )
+    explainer.__test__(data_AE['dataset'].x)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -101,7 +107,7 @@ if __name__ == '__main__':
     parser.add_argument('--cf_lr', type=float, default=0.009, help='CF-explainer learning rate.')
     parser.add_argument('--dropout', type=float, default=0.2, help='Dropout rate (1 - keep probability).')
     parser.add_argument('--cf_optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset_str', type=str, default='pubmed', help='type of dataset.')
+    parser.add_argument('--dataset_str', type=str, default='cora', help='type of dataset.')
     parser.add_argument('--dataset_func', type=str, default='Planetoid', help='type of dataset.')
     parser.add_argument('--beta', type=float, default=0.1, help='beta variable')
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
