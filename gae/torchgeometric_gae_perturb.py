@@ -21,7 +21,7 @@ from layers import GraphConvolution
 def gcn_norm(edge_index, edge_weight=None, num_nodes=None, improved=False,
              add_self_loops=True, flow="source_to_target", dtype=None):
 
-    fill_value = 2. if improved else 1.
+    fill_value = 1.
 
     assert flow in ["source_to_target", "target_to_source"]
     num_nodes = maybe_num_nodes(edge_index, num_nodes)
@@ -76,10 +76,15 @@ class GraphConvolutionPerturb(MessagePassing):
         self.in_features = in_features
         self.out_features = out_features
         self.weight = Parameter(torch.FloatTensor(in_features, out_features))
+
         if bias is not None:
             self.bias = Parameter(torch.FloatTensor(out_features))
         else:
             self.register_parameter('bias', None)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.uniform_(self.weight, 0.0, 0.001)
 
     def forward(self, x, edge_index, edge_weight):
 
@@ -88,8 +93,7 @@ class GraphConvolutionPerturb(MessagePassing):
                              size=None)
         if self.bias is not None:
             out += self.bias
-        else:
-            return out
+        return out
 
     def __repr__(self):
         return self.__class__.__name__ + ' (' \
@@ -123,7 +127,7 @@ class GCNSyntheticPerturb(nn.Module):
         # P_hat needs to be symmetric ==>
         # learn vector representing entries in upper/lower triangular matrix and use to populate P_hat later
         self.P_vec_size = (edge_index.size(1))
-
+        ### P_vec is initialized as a vector of zeros - no sigmoid is applied
         self.P_vec = Parameter(torch.FloatTensor(torch.zeros((self.P_vec_size,))))
 
         self.P_vec.to(device)
@@ -158,8 +162,9 @@ class GCNSyntheticPerturb(nn.Module):
         # Think more about how to initialize this
         torch.sub(self.P_vec, eps)
 
-    def forward(self, x, logits=True):
-        edge_index, edge_weight = gcn_norm(self.edge_index, self.P_vec.sigmoid(), self.num_nodes)
+    def forward(self, x):
+        # edge_index, edge_weight = gcn_norm(self.edge_index, self.P_vec.sigmoid(), self.num_nodes)
+        edge_index, edge_weight = gcn_norm(self.edge_index, self.P_vec, self.num_nodes)
         x = self.gc1(x, edge_index, edge_weight)
         x = F.relu(x)
         x = self.gc2(x, edge_index, edge_weight)

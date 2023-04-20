@@ -82,7 +82,8 @@ def main(gae_args):
     explainer = GCNSyntheticPerturb(
         data_AE['feat_dim'], gae_args.hidden1, gae_args.hidden2, data_AE['dataset'].train_pos_edge_index, data_AE['n_nodes']
     )
-    explainer.__test__(data_AE['dataset'].x)
+    explainer.cuda()
+    explainer.forward(data_AE['dataset'].x)
 
 
 if __name__ == '__main__':
