@@ -127,20 +127,15 @@ class GCNSyntheticPerturb(nn.Module):
         # P_hat needs to be symmetric ==>
         # learn vector representing entries in upper/lower triangular matrix and use to populate P_hat later
         self.P_vec_size = (edge_index.size(1))
-        ### P_vec is initialized as a vector of zeros - no sigmoid is applied
+
         self.P_vec = Parameter(torch.FloatTensor(torch.zeros((self.P_vec_size,))))
 
         self.P_vec.to(device)
-        # self.reset_parameters()
+        # initilizing P_vec using normal distribution
+        self.reset_parameters()
 
         self.gc1 = GraphConvolutionPerturb(nfeat, nhid)
         self.gc2 = GraphConvolutionPerturb(nhid, nout)
-
-    def __test__(self, x):
-        edge_index, edge_weight = gcn_norm(self.edge_index, self.P_vec, self.num_nodes)
-        x = self.gc1(x, edge_index, edge_weight)
-        x = F.relu(x)
-        x = self.gc2(x, edge_index, edge_weight)
 
     def __L1__(self):
         return torch.linalg.norm(self.P_hat_symm, ord=1)
@@ -160,11 +155,11 @@ class GCNSyntheticPerturb(nn.Module):
 
     def reset_parameters(self, eps=10 ** -4):
         # Think more about how to initialize this
-        torch.sub(self.P_vec, eps)
+        nn.init.uniform_(self.P_vec, 0.0, 0.001)
 
     def forward(self, x):
-        # edge_index, edge_weight = gcn_norm(self.edge_index, self.P_vec.sigmoid(), self.num_nodes)
-        edge_index, edge_weight = gcn_norm(self.edge_index, self.P_vec, self.num_nodes)
+        edge_index, edge_weight = gcn_norm(self.edge_index, self.P_vec.sigmoid(), self.num_nodes)
+        # edge_index, edge_weight = gcn_norm(self.edge_index, self.P_vec, self.num_nodes)
         x = self.gc1(x, edge_index, edge_weight)
         x = F.relu(x)
         x = self.gc2(x, edge_index, edge_weight)
