@@ -83,7 +83,10 @@ def main(gae_args):
         data_AE['feat_dim'], gae_args.hidden1, gae_args.hidden2, data_AE['dataset'].train_pos_edge_index, data_AE['n_nodes']
     )
     explainer.cuda()
-    explainer.forward(data_AE['dataset'].x)
+    z = explainer.encode(data_AE['dataset'].x)
+    explainer.decode(z, data_AE['dataset'].test_pos_edge_index[:,2].reshape(-1,1))
+    explainer.loss(data_AE['dataset'].x, data_AE['dataset'].test_pos_edge_index[:,2].reshape(-1,1), torch.ones(size=(1,1)))
+
 
 
 if __name__ == '__main__':

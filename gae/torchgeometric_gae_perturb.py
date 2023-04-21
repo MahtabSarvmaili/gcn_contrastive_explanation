@@ -76,9 +76,10 @@ class GraphConvolutionPerturb(MessagePassing):
         self.in_features = in_features
         self.out_features = out_features
         self.weight = Parameter(torch.FloatTensor(in_features, out_features))
-
+        # initializing parameters using normal distribution
+        # initializing bias as vector of zeros
         if bias is not None:
-            self.bias = Parameter(torch.FloatTensor(out_features))
+            self.bias = Parameter(torch.FloatTensor(np.zeros(out_features)))
         else:
             self.register_parameter('bias', None)
         self.reset_parameters()
@@ -130,7 +131,7 @@ class GCNSyntheticPerturb(nn.Module):
 
         self.P_vec = Parameter(torch.FloatTensor(torch.zeros((self.P_vec_size,))))
 
-        self.P_vec.to(device)
+        # self.P_vec.to(device)
         # initilizing P_vec using normal distribution
         self.reset_parameters()
 
@@ -157,7 +158,7 @@ class GCNSyntheticPerturb(nn.Module):
         # Think more about how to initialize this
         nn.init.uniform_(self.P_vec, 0.0, 0.001)
 
-    def forward(self, x):
+    def encode(self, x):
         edge_index, edge_weight = gcn_norm(self.edge_index, self.P_vec.sigmoid(), self.num_nodes)
         # edge_index, edge_weight = gcn_norm(self.edge_index, self.P_vec, self.num_nodes)
         x = self.gc1(x, edge_index, edge_weight)
@@ -165,99 +166,48 @@ class GCNSyntheticPerturb(nn.Module):
         x = self.gc2(x, edge_index, edge_weight)
         return x
 
-    def forward_prediction(self, x, logits=True):
-        # Same as forward but uses P instead of P_hat ==> non-differentiable
-        # but needed for actual predictions
-        self.P = (torch.sigmoid(self.P_hat_symm) >= 0.5).float()
-            # threshold P_hat
-
-        # no need for self loop since we normalized the adjacency map
-        A_tilde = self.P * self.adj #+ torch.eye(self.num_nodes).cuda()
-
-        D_tilde = get_degree_matrix(A_tilde)
-        # Raise to power -1/2, set all infs to 0s
-        D_tilde_exp = D_tilde ** (-1 / 2)
-        D_tilde_exp[torch.isinf(D_tilde_exp)] = 0
-
-        # Create norm_adj = (D + I)^(-1/2) * (A + I) * (D + I) ^(-1/2)
-        norm_adj = torch.mm(torch.mm(D_tilde_exp, A_tilde), D_tilde_exp)
-        x1 = F.relu(self.gc1(x, norm_adj))
-        x1 = F.dropout(x1, self.dropout, training=self.training)
-        x2 = F.relu(self.gc2(x1, norm_adj))
-        x2 = F.dropout(x2, self.dropout, training=self.training)
-        x3 = self.gc3(x2, norm_adj)
-        x = self.lin(torch.cat((x1, x2, x3), dim=1))
-        if logits:
-            return F.log_softmax(x, dim=1)
-        else:
-            return F.softmax(x, dim=1)
-
-    def encode(self, x, sub_adj):
-        self.sub_adj = sub_adj
-        # Same as normalize_adj in utils.py except includes P_hat in A_tilde
-        self.P_hat_symm = create_symm_matrix_from_vec(self.P_vec, self.num_nodes)  # Ensure symmetry
-
-        A_tilde = torch.FloatTensor(self.num_nodes, self.num_nodes)
-        A_tilde.requires_grad = True
-        # Learn P_hat that gets multiplied element-wise with adj -- only edge deletions
-        A_tilde = torch.sigmoid(self.P_hat_symm) * self.sub_adj.cuda()
-        # + torch.eye(self.num_nodes).cuda()  # Use sigmoid to bound P_hat in [0,1]
-
-        D_tilde = get_degree_matrix(A_tilde).detach()  # Don't need gradient of this
-        # Raise to power -1/2, set all infs to 0s
-        D_tilde_exp = D_tilde ** (-1 / 2)
-        D_tilde_exp[torch.isinf(D_tilde_exp)] = 0
-
-        # Create norm_adj = (D + I)^(-1/2) * (A + I) * (D + I) ^(-1/2)
-        norm_adj = torch.mm(torch.mm(D_tilde_exp, A_tilde), D_tilde_exp)
-
-        x1 = F.relu(self.gc1(x, norm_adj))
-        x1 = F.dropout(x1, self.dropout, training=self.training)
-        x2 = F.relu(self.gc2(x1, norm_adj))
-        x2 = F.dropout(x2, self.dropout, training=self.training)
-        x3 = self.gc3(x2, norm_adj)
-        x = torch.cat((x1, x2, x3), dim=1)
-        return x
-
     def encode_prediction(self, x):
         # Same as forward but uses P instead of P_hat ==> non-differentiable
         # but needed for actual predictions
-        self.P = (torch.sigmoid(self.P_hat_symm) >= 0.5).float()  # threshold P_hat
+        self.P = (self.P_vec.sigmoid() >= 0.5).float()
 
-        A_tilde = self.P * self.adj #+ torch.eye(self.num_nodes).cuda()
-
-        D_tilde = get_degree_matrix(A_tilde)
-        # Raise to power -1/2, set all infs to 0s
-        D_tilde_exp = D_tilde ** (-1 / 2)
-        D_tilde_exp[torch.isinf(D_tilde_exp)] = 0
-
-        # Create norm_adj = (D + I)^(-1/2) * (A + I) * (D + I) ^(-1/2)
-        norm_adj = torch.mm(torch.mm(D_tilde_exp, A_tilde), D_tilde_exp)
-        x1 = F.relu(self.gc1(x, norm_adj))
-        x1 = F.dropout(x1, self.dropout, training=self.training)
-        x2 = F.relu(self.gc2(x1, norm_adj))
-        x2 = F.dropout(x2, self.dropout, training=self.training)
-        x3 = self.gc3(x2, norm_adj)
-        x = torch.cat((x1, x2, x3), dim=1)
+        edge_index, edge_weight = gcn_norm(self.edge_index, self.P, self.num_nodes)
+        # edge_index, edge_weight = gcn_norm(self.edge_index, self.P_vec, self.num_nodes)
+        x = self.gc1(x, edge_index, edge_weight)
+        x = F.relu(x)
+        x = self.gc2(x, edge_index, edge_weight)
         return x
 
-    def loss(self, output, y_pred_orig, y_pred_new_actual):
-        PLoss = 0
-        pred_same = (y_pred_new_actual == y_pred_orig).float()
+    def decode(self, z, test_edge_index): # only pos and neg edges
+        logits = (z[test_edge_index[0]] * z[test_edge_index[1]]).sum(dim=-1)  # dot product
+        return logits
 
-        # Need dim >=2 for F.nll_loss to work
-        output = output.unsqueeze(0)
-        y_pred_orig = y_pred_orig.unsqueeze(0)
-        cf_adj = self.P * self.adj
-        cf_adj.requires_grad = True  # Need to change this otherwise loss_graph_dist has no gradient
+    def decode_all(self, z):
+        prob_adj = z @ z.t() # get adj NxN
+        return (prob_adj > 0).nonzero(as_tuple=False).t() # get predicted edge_list
 
-        # Want negative in front to maximize loss instead of minimizing it to find CFs
-        loss_pred = - F.nll_loss(output, y_pred_orig)
-        loss_graph_dist = sum(sum(abs(cf_adj - self.adj.cuda()))) / 2  # Number of edges changed (symmetrical)
 
-        # Zero-out loss_pred with pred_same if prediction flips
-        loss_total = pred_same * loss_pred + self.beta * loss_graph_dist
-        return loss_total, loss_pred, loss_graph_dist, torch.inf, torch.inf, torch.inf, cf_adj, PLoss
+    def loss(self, x, test_edge_index, link_label):
+
+        z = self.encode(x)  # encode
+        link_logits = self.decode(z, test_edge_index)  # decode
+        loss = F.binary_cross_entropy_with_logits(link_logits, link_label)
+        # PLoss = 0
+        # pred_same = (y_pred_new_actual == y_pred_orig).float()
+        #
+        # # Need dim >=2 for F.nll_loss to work
+        # output = output.unsqueeze(0)
+        # y_pred_orig = y_pred_orig.unsqueeze(0)
+        # cf_adj = self.P * self.adj
+        # cf_adj.requires_grad = True  # Need to change this otherwise loss_graph_dist has no gradient
+        #
+        # # Want negative in front to maximize loss instead of minimizing it to find CFs
+        # loss_pred = - F.nll_loss(output, y_pred_orig)
+        # loss_graph_dist = sum(sum(abs(cf_adj - self.adj.cuda()))) / 2  # Number of edges changed (symmetrical)
+        #
+        # # Zero-out loss_pred with pred_same if prediction flips
+        # loss_total = pred_same * loss_pred + self.beta * loss_graph_dist
+        return loss
 
     def loss__(self, graph_AE, x, output, y_orig_onehot, l1=1, l2=1, ae=1, dist=1):
         closs = 0
