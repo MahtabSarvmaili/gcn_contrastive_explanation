@@ -12,6 +12,16 @@ from gae.torchgeometric_gae_perturb import GCNSyntheticPerturb
 sys.path.append('../..')
 
 
+def load_state_dict(model):
+    # this function specifically loads the GAE to the GAEPerturbation that is inherited from MessagePassign
+    from collections import OrderedDict
+
+    new_state_dict = OrderedDict()
+    for k, v in model.state_dict().items():
+        name = k.replace("lin.", "")  # remove `module.`
+        new_state_dict[name] = v.t()
+    return new_state_dict
+
 def get_link_labels(pos_edge_index, neg_edge_index, device):
     # returns a tensor:
     # [1,1,1,1,...,0,0,0,0,0,..] with the number of ones is equel to the lenght of pos_edge_index
@@ -83,6 +93,8 @@ def main(gae_args):
         data_AE['feat_dim'], gae_args.hidden1, gae_args.hidden2, data_AE['dataset'].train_pos_edge_index, data_AE['n_nodes']
     )
     explainer.cuda()
+    state_dict = load_state_dict(model)
+    explainer.load_state_dict(state_dict, strict=False)
     z = explainer.encode(data_AE['dataset'].x)
     explainer.decode(z, data_AE['dataset'].test_pos_edge_index[:,2].reshape(-1,1))
     explainer.loss(data_AE['dataset'].x, data_AE['dataset'].test_pos_edge_index[:,2].reshape(-1,1), torch.ones(size=(1,1)))

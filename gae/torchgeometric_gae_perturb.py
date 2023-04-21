@@ -7,6 +7,7 @@ from torch_sparse import SparseTensor, fill_diag, matmul, mul
 from torch_sparse import sum as sparsesum
 from torch.nn.parameter import Parameter
 from torch_geometric.utils import dense_to_sparse
+from torch_geometric.nn import inits
 from utils import get_degree_matrix, create_symm_matrix_from_vec, create_vec_from_symm_matrix
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.utils.num_nodes import maybe_num_nodes
@@ -128,15 +129,11 @@ class GCNSyntheticPerturb(nn.Module):
         # P_hat needs to be symmetric ==>
         # learn vector representing entries in upper/lower triangular matrix and use to populate P_hat later
         self.P_vec_size = (edge_index.size(1))
-
+        # Initializing P_vec as vector of zeros
         self.P_vec = Parameter(torch.FloatTensor(torch.zeros((self.P_vec_size,))))
-
-        # self.P_vec.to(device)
-        # initilizing P_vec using normal distribution
-        self.reset_parameters()
-
-        self.gc1 = GraphConvolutionPerturb(nfeat, nhid)
-        self.gc2 = GraphConvolutionPerturb(nhid, nout)
+        # self.reset_parameters()
+        self.conv1 = GraphConvolutionPerturb(nfeat, nhid)
+        self.conv2 = GraphConvolutionPerturb(nhid, nout)
 
     def __L1__(self):
         return torch.linalg.norm(self.P_hat_symm, ord=1)
@@ -154,16 +151,16 @@ class GCNSyntheticPerturb(nn.Module):
     def __loss_graph_dist__(self, cf_adj):
         return torch.dist(cf_adj , self.adj.cuda(), p=1) / 2
 
-    def reset_parameters(self, eps=10 ** -4):
-        # Think more about how to initialize this
-        nn.init.uniform_(self.P_vec, 0.0, 0.001)
+    # def reset_parameters(self, eps=10 ** -4):
+    #     # Think more about how to initialize this
+    #     # nn.init.uniform_(self.P_vec, 0.0, 0.001)
 
     def encode(self, x):
         edge_index, edge_weight = gcn_norm(self.edge_index, self.P_vec.sigmoid(), self.num_nodes)
         # edge_index, edge_weight = gcn_norm(self.edge_index, self.P_vec, self.num_nodes)
-        x = self.gc1(x, edge_index, edge_weight)
-        x = F.relu(x)
-        x = self.gc2(x, edge_index, edge_weight)
+        x = self.conv1(x, edge_index, edge_weight)
+        x = x.relu()
+        x = self.conv2(x, edge_index, edge_weight)
         return x
 
     def encode_prediction(self, x):
@@ -173,9 +170,9 @@ class GCNSyntheticPerturb(nn.Module):
 
         edge_index, edge_weight = gcn_norm(self.edge_index, self.P, self.num_nodes)
         # edge_index, edge_weight = gcn_norm(self.edge_index, self.P_vec, self.num_nodes)
-        x = self.gc1(x, edge_index, edge_weight)
+        x = self.conv1(x, edge_index, edge_weight)
         x = F.relu(x)
-        x = self.gc2(x, edge_index, edge_weight)
+        x = self.conv2(x, edge_index, edge_weight)
         return x
 
     def decode(self, z, test_edge_index): # only pos and neg edges
