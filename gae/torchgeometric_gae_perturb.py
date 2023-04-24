@@ -4,8 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-from torch_sparse import SparseTensor, fill_diag, matmul, mul
-from torch_sparse import sum as sparsesum
+from torch_geometric.typing import Adj, OptTensor, PairTensor
 from torch.nn.parameter import Parameter
 from torch_geometric.utils import dense_to_sparse
 from torch_geometric.nn import inits
@@ -85,7 +84,7 @@ class GraphConvolutionPerturb(MessagePassing):
             self.register_parameter('bias', None)
         # self.reset_parameters()
 
-    def forward(self, x, edge_index, P_vec):
+    def forward(self, x: Tensor, edge_index: Adj, P_vec: Tensor = None) -> Tensor:
         # x has shape [N, in_channels]
         # edge_index has shape [2, E]
         # Step 1: Add self-loops to the adjacency matrix.
