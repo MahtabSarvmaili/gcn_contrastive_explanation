@@ -4,6 +4,7 @@ import sys
 import torch
 from data.data_loader import load_data, load_synthetic, load_synthetic_AE, load_data_AE
 from torch.optim import Adam
+from torch.nn.utils import clip_grad_norm_
 from gae.torchgeometric_gae import GAE
 import torch.nn.functional as F
 from torch_geometric.utils import negative_sampling
@@ -18,7 +19,7 @@ def load_state_dict(model):
 
     new_state_dict = OrderedDict()
     for k, v in model.state_dict().items():
-        name = k.replace("lin.", "")  # remove `module.`
+        name = k.replace(".bias", ".lin.bias")  # remove `module.`
         new_state_dict[name] = v.t()
     return new_state_dict
 
@@ -88,16 +89,30 @@ def main(gae_args):
         log = 'Epoch: {:03d}, Loss: {:.4f}, Val: {:.4f}, Test: {:.4f}'
         if epoch % 10 == 0:
             print(log.format(epoch, train_loss, best_val_perf, test_perf))
-
+    model.encode(data_AE['dataset'].x, data_AE['dataset'].train_pos_edge_index)
     explainer = GCNSyntheticPerturb(
         data_AE['feat_dim'], gae_args.hidden1, gae_args.hidden2, data_AE['dataset'].train_pos_edge_index, data_AE['n_nodes']
     )
     explainer.cuda()
-    state_dict = load_state_dict(model)
-    explainer.load_state_dict(state_dict, strict=False)
+    # Copy GAE's parameters to the explainer
+    explainer.load_state_dict(model.state_dict(), strict=False)
+    # Freeze weights from original model in explainer
+    for name, param in explainer.named_parameters():
+        if name.endswith("weight") or name.endswith("bias"):
+            param.requires_grad = False
+    explainer_optimizer = Adam(explainer.parameters(), lr=0.01)
+
     z = explainer.encode(data_AE['dataset'].x)
     explainer.decode(z, data_AE['dataset'].test_pos_edge_index[:,2].reshape(-1,1))
-    explainer.loss(data_AE['dataset'].x, data_AE['dataset'].test_pos_edge_index[:,2].reshape(-1,1), torch.ones(size=(1,1)))
+
+    for i in range(100):
+        explainer_optimizer.zero_grad()
+        loss_total = explainer.loss(
+            data_AE['dataset'].x, data_AE['dataset'].test_pos_edge_index[:,2].reshape(-1,1), torch.zeros(size=(1,)).to('cuda')
+        )
+        loss_total.backward()
+        clip_grad_norm_(explainer.parameters(), 2.0)
+        explainer_optimizer.step()
 
 
 

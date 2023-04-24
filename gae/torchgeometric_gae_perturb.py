@@ -46,7 +46,6 @@ def gcn_norm(edge_index, edge_weight=None, num_nodes=None, improved=False,
     return edge_index, deg_inv_sqrt[row] * edge_weight * deg_inv_sqrt[col]
 
 
-
 def pertinent_negative_loss(output, y_orig_onehot, const, kappa):
     target_lab_score = (output * y_orig_onehot).sum(dim=0)
     max_nontarget_lab_score = (
@@ -72,17 +71,21 @@ def cross_loss(output, y):
 
 
 class GraphConvolutionPerturb(MessagePassing):
-    def __init__(self, in_channels, out_channels, edge_index_size):
+    def __init__(self, in_channels, out_channels, edge_index_size, bias=True):
         super(GraphConvolutionPerturb, self).__init__()
         self.in_features = in_channels
         self.out_features = out_channels
-        self.lin = torch.nn.Linear(in_channels, out_channels)
+        self.lin = torch.nn.Linear(in_channels, out_channels, bias=False)
         self.num_nodes = edge_index_size
         # Initializing P_vec as vector of zeros
-        self.P_vec = Parameter(torch.FloatTensor(torch.zeros((edge_index_size,))))
+
+        if bias:
+            self.bias = Parameter(torch.Tensor(out_channels))
+        else:
+            self.register_parameter('bias', None)
         # self.reset_parameters()
 
-    def forward(self, x, edge_index):
+    def forward(self, x, edge_index, P_vec):
         # x has shape [N, in_channels]
         # edge_index has shape [2, E]
         # Step 1: Add self-loops to the adjacency matrix.
@@ -90,16 +93,16 @@ class GraphConvolutionPerturb(MessagePassing):
 
         # Step 2: Linearly transform node feature matrix.
         edge_index, tmp_edge_weight = add_remaining_self_loops(
-            edge_index, self.P_vec.sigmoid(), 1, self.in_features)
+            edge_index, P_vec, 1, self.in_features)
         x = self.lin(x)
 
         # Step 3-5: Start propagating messages.
         out = self.propagate(edge_index, x=x, edge_weight=tmp_edge_weight, size=None)
         if self.bias is not None:
             out += self.bias
-
         return out
-    def message(self, x_j, edge_index, edge_weight, size):
+
+    def message(self, x_j, edge_index, edge_weight):
         # x_j has shape [E, out_channels]
 
         row, col = edge_index[0], edge_index[1]
@@ -108,14 +111,8 @@ class GraphConvolutionPerturb(MessagePassing):
         deg_inv_sqrt = deg.pow_(-0.5)
         norm = deg_inv_sqrt[row] * deg_inv_sqrt[col]
         return norm.view(-1, 1) * x_j
-        #
-        # # Step 3: Normalize node features.
-        # row, col = edge_index
-        # deg = degree(row, size[0], dtype=x_j.dtype)
-        # deg_inv_sqrt = deg.pow(-0.5)
-        # norm = deg_inv_sqrt[row] * deg_inv_sqrt[col]
-        #
-        # return norm.view(-1, 1) * x_j
+
+
 class GCNSyntheticPerturb(nn.Module):
     """
     3-layer GCN used in GNN Explainer synthetic tasks
@@ -145,19 +142,13 @@ class GCNSyntheticPerturb(nn.Module):
         # self.reset_parameters()
         self.conv1 = GraphConvolutionPerturb(nfeat, nhid, edge_index_size=edge_index.size(1))
         self.conv2 = GraphConvolutionPerturb(nhid, nout, edge_index_size=edge_index.size(1))
+        self.P_vec = Parameter(torch.FloatTensor(torch.zeros((edge_index.size(1),))))
 
     def __L1__(self):
-        return torch.linalg.norm(self.P_hat_symm, ord=1)
+        return torch.linalg.norm(self.P_vec, ord=1)
 
     def __L2__(self):
-        return torch.linalg.norm(self.P_hat_symm, ord=2)
-
-    def __AE_recons__(self, graph_AE, x, cf_adj):
-        cf_adj_sparse = dense_to_sparse(cf_adj)[0]
-        # the sigmoid is already applied in the reconstruction
-        reconst_P = (graph_AE.forward(x, cf_adj_sparse) > 0.5).float()
-        l2_AE = torch.dist(cf_adj, reconst_P, p=2)
-        return l2_AE
+        return torch.linalg.norm(self.P_vec, ord=2)
 
     def __loss_graph_dist__(self, cf_adj):
         return torch.dist(cf_adj , self.adj.cuda(), p=1) / 2
@@ -167,22 +158,18 @@ class GCNSyntheticPerturb(nn.Module):
     #     # nn.init.uniform_(self.P_vec, 0.0, 0.001)
 
     def encode(self, x):
-        # edge_index, edge_weight = gcn_norm(self.edge_index, self.P_vec.sigmoid(), self.num_nodes)
-        x = self.conv1(x, self.edge_index)
+        x = self.conv1(x, self.edge_index, self.P_vec.sigmoid())
         x = x.relu()
-        x = self.conv2(x, self.edge_index)
+        x = self.conv2(x, self.edge_index, self.P_vec.sigmoid())
         return x
 
     def encode_prediction(self, x):
         # Same as forward but uses P instead of P_hat ==> non-differentiable
         # but needed for actual predictions
-        self.P = (self.P_vec.sigmoid() >= 0.5).float()
-
-        edge_index, edge_weight = gcn_norm(self.edge_index, self.P, self.num_nodes)
-        # edge_index, edge_weight = gcn_norm(self.edge_index, self.P_vec, self.num_nodes)
-        x = self.conv1(x, edge_index, edge_weight)
-        x = F.relu(x)
-        x = self.conv2(x, edge_index, edge_weight)
+        P_vec = (self.P_vec.sigmoid() >= 0.5).float()
+        x = self.conv1(x, self.edge_index, P_vec)
+        x = x.relu()
+        x = self.conv2(x, self.edge_index, P_vec)
         return x
 
     def decode(self, z, test_edge_index): # only pos and neg edges
@@ -194,27 +181,17 @@ class GCNSyntheticPerturb(nn.Module):
         return (prob_adj > 0).nonzero(as_tuple=False).t() # get predicted edge_list
 
 
-    def loss(self, x, test_edge_index, link_label):
+    def loss(self, x, test_edge_index, link_label, l1=1, l2=1, ae=1, dist=1):
 
         z = self.encode(x)  # encode
         link_logits = self.decode(z, test_edge_index)  # decode
-        loss = F.binary_cross_entropy_with_logits(link_logits, link_label)
-        # PLoss = 0
-        # pred_same = (y_pred_new_actual == y_pred_orig).float()
-        #
-        # # Need dim >=2 for F.nll_loss to work
-        # output = output.unsqueeze(0)
-        # y_pred_orig = y_pred_orig.unsqueeze(0)
-        # cf_adj = self.P * self.adj
-        # cf_adj.requires_grad = True  # Need to change this otherwise loss_graph_dist has no gradient
-        #
-        # # Want negative in front to maximize loss instead of minimizing it to find CFs
-        # loss_pred = - F.nll_loss(output, y_pred_orig)
-        # loss_graph_dist = sum(sum(abs(cf_adj - self.adj.cuda()))) / 2  # Number of edges changed (symmetrical)
-        #
-        # # Zero-out loss_pred with pred_same if prediction flips
-        # loss_total = pred_same * loss_pred + self.beta * loss_graph_dist
-        return loss
+        loss_perturb = F.binary_cross_entropy_with_logits(link_logits, link_label)
+        L1 = self.__L1__()
+        L2 = self.__L2__()
+        # if self.cf_expl is False:
+        #     closs = cross_loss(output.unsqueeze(dim=0), y_orig_onehot.argmax(keepdims=True))
+        loss_total = loss_perturb + l1 * self.psi_l1 * L1 + l2 * L2
+        return loss_total
 
     def loss__(self, graph_AE, x, output, y_orig_onehot, l1=1, l2=1, ae=1, dist=1):
         closs = 0
