@@ -3,6 +3,7 @@ import pylab as p
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch import Tensor
 from torch_sparse import SparseTensor, fill_diag, matmul, mul
 from torch_sparse import sum as sparsesum
 from torch.nn.parameter import Parameter
@@ -11,7 +12,7 @@ from torch_geometric.nn import inits
 from utils import get_degree_matrix, create_symm_matrix_from_vec, create_vec_from_symm_matrix
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.utils.num_nodes import maybe_num_nodes
-from torch_geometric.utils import add_remaining_self_loops
+from torch_geometric.utils import add_remaining_self_loops, add_self_loops, degree
 from torch_scatter import scatter_add
 from gae.utils import preprocess_graph
 # torch.manual_seed(0)
@@ -71,38 +72,50 @@ def cross_loss(output, y):
 
 
 class GraphConvolutionPerturb(MessagePassing):
-
-    def __init__(self, in_features, out_features, bias=True):
+    def __init__(self, in_channels, out_channels, edge_index_size):
         super(GraphConvolutionPerturb, self).__init__()
-        self.in_features = in_features
-        self.out_features = out_features
-        self.weight = Parameter(torch.FloatTensor(in_features, out_features))
-        # initializing parameters using normal distribution
-        # initializing bias as vector of zeros
-        if bias is not None:
-            self.bias = Parameter(torch.FloatTensor(np.zeros(out_features)))
-        else:
-            self.register_parameter('bias', None)
-        self.reset_parameters()
+        self.in_features = in_channels
+        self.out_features = out_channels
+        self.lin = torch.nn.Linear(in_channels, out_channels)
+        self.num_nodes = edge_index_size
+        # Initializing P_vec as vector of zeros
+        self.P_vec = Parameter(torch.FloatTensor(torch.zeros((edge_index_size,))))
+        # self.reset_parameters()
 
-    def reset_parameters(self):
-        nn.init.uniform_(self.weight, 0.0, 0.001)
+    def forward(self, x, edge_index):
+        # x has shape [N, in_channels]
+        # edge_index has shape [2, E]
+        # Step 1: Add self-loops to the adjacency matrix.
+        # _, edge_weight = gcn_norm(edge_index, self.P_vec, self.num_nodes)
 
-    def forward(self, x, edge_index, edge_weight):
+        # Step 2: Linearly transform node feature matrix.
+        edge_index, tmp_edge_weight = add_remaining_self_loops(
+            edge_index, self.P_vec.sigmoid(), 1, self.in_features)
+        x = self.lin(x)
 
-        support = torch.mm(x, self.weight)
-        out = self.propagate(edge_index, x=support, edge_weight=edge_weight,
-                             size=None)
+        # Step 3-5: Start propagating messages.
+        out = self.propagate(edge_index, x=x, edge_weight=tmp_edge_weight, size=None)
         if self.bias is not None:
             out += self.bias
+
         return out
+    def message(self, x_j, edge_index, edge_weight, size):
+        # x_j has shape [E, out_channels]
 
-    def __repr__(self):
-        return self.__class__.__name__ + ' (' \
-               + str(self.in_features) + ' -> ' \
-               + str(self.out_features) + ')'
-
-
+        row, col = edge_index[0], edge_index[1]
+        idx = col
+        deg = scatter_add(edge_weight, idx, dim=0, dim_size=self.num_nodes)
+        deg_inv_sqrt = deg.pow_(-0.5)
+        norm = deg_inv_sqrt[row] * deg_inv_sqrt[col]
+        return norm.view(-1, 1) * x_j
+        #
+        # # Step 3: Normalize node features.
+        # row, col = edge_index
+        # deg = degree(row, size[0], dtype=x_j.dtype)
+        # deg_inv_sqrt = deg.pow(-0.5)
+        # norm = deg_inv_sqrt[row] * deg_inv_sqrt[col]
+        #
+        # return norm.view(-1, 1) * x_j
 class GCNSyntheticPerturb(nn.Module):
     """
     3-layer GCN used in GNN Explainer synthetic tasks
@@ -128,12 +141,10 @@ class GCNSyntheticPerturb(nn.Module):
         self.cf_expl = cf_expl
         # P_hat needs to be symmetric ==>
         # learn vector representing entries in upper/lower triangular matrix and use to populate P_hat later
-        self.P_vec_size = (edge_index.size(1))
         # Initializing P_vec as vector of zeros
-        self.P_vec = Parameter(torch.FloatTensor(torch.zeros((self.P_vec_size,))))
         # self.reset_parameters()
-        self.conv1 = GraphConvolutionPerturb(nfeat, nhid)
-        self.conv2 = GraphConvolutionPerturb(nhid, nout)
+        self.conv1 = GraphConvolutionPerturb(nfeat, nhid, edge_index_size=edge_index.size(1))
+        self.conv2 = GraphConvolutionPerturb(nhid, nout, edge_index_size=edge_index.size(1))
 
     def __L1__(self):
         return torch.linalg.norm(self.P_hat_symm, ord=1)
@@ -156,11 +167,10 @@ class GCNSyntheticPerturb(nn.Module):
     #     # nn.init.uniform_(self.P_vec, 0.0, 0.001)
 
     def encode(self, x):
-        edge_index, edge_weight = gcn_norm(self.edge_index, self.P_vec.sigmoid(), self.num_nodes)
-        # edge_index, edge_weight = gcn_norm(self.edge_index, self.P_vec, self.num_nodes)
-        x = self.conv1(x, edge_index, edge_weight)
+        # edge_index, edge_weight = gcn_norm(self.edge_index, self.P_vec.sigmoid(), self.num_nodes)
+        x = self.conv1(x, self.edge_index)
         x = x.relu()
-        x = self.conv2(x, edge_index, edge_weight)
+        x = self.conv2(x, self.edge_index)
         return x
 
     def encode_prediction(self, x):
