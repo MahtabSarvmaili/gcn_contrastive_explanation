@@ -113,6 +113,8 @@ def main(gae_args):
         loss_total.backward()
         clip_grad_norm_(explainer.parameters(), 2.0)
         explainer_optimizer.step()
+        pred = explainer.single_test(data_AE['dataset'].x, data_AE['dataset'].test_pos_edge_index[:, 2].reshape(-1,1))
+        print(pred)
 
 
 
