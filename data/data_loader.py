@@ -139,17 +139,26 @@ def load_data_AE(args):
     transformer = T.Compose([
         T.ToDevice(args.device),
         T.NormalizeFeatures(),
+        T.RandomLinkSplit(num_val=0.05, num_test=0.1, is_undirected=True, add_negative_train_samples=True)
     ])
-    dataset = __load__data__(args.dataset_func, args.dataset_str, transformer)
-    all_edge_index = dataset.edge_index
-    dt = train_test_split_edges(dataset, 0.05, 0.1)
-    dataset.train_mask = dataset.test_mask = dataset.val_mask = None
+    # for training, we exchange messages on all training edges
+    # for validation, we exchange messages on all training edges
+    # for testing, we exchange messages on all training and validation edges
+    train, val, test = __load__data__(args.dataset_func, args.dataset_str, transformer)
+    adj = to_dense_adj(train['edge_index'], max_num_nodes=train['x'].size(0)).squeeze(0)
+    train['adj'] = normalize_adj(adj, args.device)
+    train.train_mask = train.val_mask = train.test_mask = None
+    val.train_mask = val.val_mask = val.test_mask = None
+    test.train_mask = train.val_mask = train.test_mask = None
+    adj = to_dense_adj(test['edge_index'], max_num_nodes=test['x'].size(0)).squeeze(0)
+    test['adj'] = normalize_adj(adj, args.device)
+
     return {
-        'dataset':dt,
-        'n_nodes': dt.num_nodes,
-        'feat_dim': dt.num_features,
-        'num_classes': len(dt.y.unique()),
-        'all_edge_index':all_edge_index
+        'train': train,
+        'val': val,
+        'test': test,
+        'n_nodes': train.x.size(0),
+        'n_features': train.x.size(1)
     }
 
 

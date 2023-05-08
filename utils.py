@@ -9,6 +9,18 @@ from torch_geometric.utils import k_hop_subgraph, to_dense_adj, subgraph
 # np.random.seed(0)
 
 
+def get_link_labels(pos_edge_index, neg_edge_index, device, dtype=torch.int64, one_hot=False):
+    # returns a tensor:
+    # [1,1,1,1,...,0,0,0,0,0,..] with the number of ones is equel to the lenght of pos_edge_index
+    # and the number of zeros is equal to the length of neg_edge_index
+    E = pos_edge_index.size(1) + neg_edge_index.size(1)
+    link_labels = torch.zeros(E, dtype=dtype, device=device)
+    link_labels[:pos_edge_index.size(1)] = 1
+    if one_hot:
+        return torch.nn.functional.one_hot(link_labels)
+    return link_labels
+
+
 def encode_onehot(labels):
     classes = set(labels)
     classes_dict = {c: np.identity(len(classes))[i, :] for i, c in
@@ -88,7 +100,6 @@ def mkdir_p(path):
 
 
 def safe_open(path, w):
-    ''' Open "path" for writing, creating any parent directories as needed.'''
     mkdir_p(os.path.dirname(path))
     return open(path, w)
 
@@ -119,7 +130,7 @@ def normalize_adj(adj, device):
 
 def get_neighbourhood(node_idx, edge_index, n_hops, features, labels, device='cuda', hard_edge_mask=False):
 
-    edge_subset = k_hop_subgraph(node_idx, n_hops, edge_index)  # Get all nodes involved
+    edge_subset = k_hop_subgraph(node_idx, n_hops, edge_index)
     edge_subset_relabel = subgraph(edge_subset[0], edge_index, relabel_nodes=True)  # Get relabelled subset of edges
     assert edge_subset[0].shape[0] > 2, "Number of nodes involved in the subgraph is less than 2"
     sub_adj = to_dense_adj(edge_subset_relabel[0]).squeeze()
