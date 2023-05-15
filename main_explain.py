@@ -11,6 +11,7 @@ from data.gengraph import gen_syn1, gen_syn2, gen_syn3, gen_syn4
 from utils import normalize_adj, get_neighbourhood, perturb_sub_adjacency, encode_onehot
 from torch_geometric.utils import negative_sampling
 from torch_geometric.loader import DataLoader
+from torch.nn.utils import clip_grad_norm_
 from sklearn.metrics import precision_recall_fscore_support
 from cf_explainer import CFExplainer
 from gae.GAE import gae
@@ -45,7 +46,7 @@ def main(explainer_args):
     p_ = r_ = f_ = 0
     model.train()
 
-    for e in range(500):
+    for e in range(200):
         for edge_id in DataLoader(range(data['train'].edge_label_index.size(-1)), batch_size=256, shuffle=True):
             model.train()
             optimizer.zero_grad()
@@ -80,7 +81,7 @@ def main(explainer_args):
 
     # explanation step
     explainer = GCNSyntheticPerturb(
-        data['n_features'], explainer_args.hidden1, explainer_args.hidden2, 1, data['train'].edge_index, data['n_nodes']
+        data['n_features'], explainer_args.hidden1, explainer_args.hidden2, 1, data['test'].edge_index, data['n_nodes']
     )
     explainer.to(explainer_args.device)
     # Copy GAE's parameters to the explainer
@@ -91,15 +92,22 @@ def main(explainer_args):
     explainer_optimizer = torch.optim.Adam(explainer.parameters(), lr=0.01)
     node_embed = model(data['test'].x, data['test'].edge_index)
 
-    for i, edge_id in enumerate(data['test'].edge_label_index.t()):
-        preds = model.link_pred(node_embed[edge_id[0]], node_embed[edge_id[1]], sigmoid=False)
+    test_labels = data['test'].edge_label
+    test_edges = data['test'].edge_label_index.t()
+    explanations = []
+    for i, edge_id in enumerate(test_edges):
         for j in range(explainer_args.explainer_epochs):
             explainer_optimizer.zero_grad()
-            explainer.loss(data['test'].x)
-        val_loss = model.loss(node_embed, edge_id, data['test'].edge_label)
-        p, r, f, _ = precision_recall_fscore_support(
-            labels.cpu().numpy(), preds.cpu().numpy(), average='macro'
-        )
+            node_embed = explainer(data['test'].x, data['test'].edge_index)
+            loss_total, pred_label = explainer.loss(node_embed, edge_id, test_labels[i])
+            loss_total.backward()
+            clip_grad_norm_(explainer.parameters(), 2.0)
+            explainer_optimizer.step()
+            if explainer_args.expl_type=='PT' or  explainer_args.expl_type=='EXE':
+                if pred_label == test_labels[i]:
+                    explanations.append(explainer.get_explanation())
+
+
     # # link_logits = model.link_pred(z[])  # decode
 
     # link_labels = get_link_labels(data.train_pos_edge_index, neg_edge_index, device=gae_args.device)

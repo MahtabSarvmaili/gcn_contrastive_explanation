@@ -12,31 +12,23 @@ from utils import get_degree_matrix, create_symm_matrix_from_vec, create_vec_fro
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.utils.num_nodes import maybe_num_nodes
 from torch_geometric.utils import add_remaining_self_loops, add_self_loops, degree
-from torch_scatter import scatter_add
+from torch_scatter import scatter_add, scatter_sum
 from gae.utils import preprocess_graph
 # torch.manual_seed(0)
 # np.random.seed(0)
 from layers import GraphConvolution
 
 
-def gcn_norm(edge_index, edge_weight=None, num_nodes=None, improved=False,
-             add_self_loops=True, flow="source_to_target", dtype=None):
+def gcn_norm(edge_index, P_vec=None, num_nodes=None, in_features=None, flow="source_to_target"):
 
     fill_value = 1.
 
     assert flow in ["source_to_target", "target_to_source"]
     num_nodes = maybe_num_nodes(edge_index, num_nodes)
+    edge_index, tmp_edge_weight = add_remaining_self_loops(
+        edge_index, P_vec, fill_value, in_features)
 
-    if edge_weight is None:
-        edge_weight = torch.ones((edge_index.size(1), ), dtype=dtype,
-                                 device=edge_index.device)
-
-    if add_self_loops:
-        edge_index, tmp_edge_weight = add_remaining_self_loops(
-            edge_index, edge_weight, fill_value, num_nodes)
-        assert tmp_edge_weight is not None
-        edge_weight = tmp_edge_weight
-    edge_weight = edge_weight.to(edge_index.device)
+    edge_weight = tmp_edge_weight.to(edge_index.device)
     row, col = edge_index[0], edge_index[1]
     idx = col if flow == "source_to_target" else row
     deg = scatter_add(edge_weight, idx, dim=0, dim_size=num_nodes)
@@ -87,7 +79,7 @@ class GraphConvolutionPerturb(MessagePassing):
         self.in_features = in_channels
         self.out_features = out_channels
         self.lin = torch.nn.Linear(in_channels, out_channels, bias=False)
-        self.z = edge_index_size
+        self.num_nodes = edge_index_size
         # Initializing P_vec as vector of zeros
 
         if bias:
@@ -103,25 +95,19 @@ class GraphConvolutionPerturb(MessagePassing):
         # _, edge_weight = gcn_norm(edge_index, self.P_vec, self.num_nodes)
 
         # Step 2: Linearly transform node feature matrix.
-        edge_index, tmp_edge_weight = add_remaining_self_loops(
-            edge_index, P_vec, 1, self.in_features)
+        edge_index, edge_weight = gcn_norm(  # yapf: disable
+            edge_index, P_vec, x.size(self.node_dim), self.in_features)
         x = self.lin(x)
-
         # Step 3-5: Start propagating messages.
-        out = self.propagate(edge_index, x=x, edge_weight=tmp_edge_weight, size=None)
+        out = self.propagate(edge_index, x=x, edge_weight=edge_weight, size=None)
         if self.bias is not None:
             out += self.bias
         return out
 
-    def message(self, x_j, edge_index, edge_weight):
+    def message(self, x_j, edge_weight):
         # x_j has shape [E, out_channels]
-
-        row, col = edge_index[0], edge_index[1]
-        idx = col
-        deg = scatter_add(edge_weight, idx, dim=0, dim_size=self.num_nodes)
-        deg_inv_sqrt = deg.pow_(-0.5)
-        norm = deg_inv_sqrt[row] * deg_inv_sqrt[col]
-        return norm.view(-1, 1) * x_j
+        out = edge_weight.view(-1, 1) * x_j
+        return out
 
 
 class GCNSyntheticPerturb(nn.Module):
@@ -151,9 +137,10 @@ class GCNSyntheticPerturb(nn.Module):
         # learn vector representing entries in upper/lower triangular matrix and use to populate P_hat later
         # Initializing P_vec as vector of zeros
         # self.reset_parameters()
-        self.conv1 = GraphConvolutionPerturb(num_features, num_hidden1, edge_index_size=edge_index.size(1))
-        self.conv2 = GraphConvolutionPerturb(num_hidden1, num_hidden2, edge_index_size=edge_index.size(1))
-        self.P_vec = Parameter(torch.FloatTensor(torch.zeros((edge_index.size(1),))))
+        self.gc1 = GraphConvolutionPerturb(num_features, num_hidden1, edge_index_size=edge_index.size(1))
+        self.gc2 = GraphConvolutionPerturb(num_hidden1, num_hidden2, edge_index_size=edge_index.size(1))
+        self.lin = nn.Linear(num_hidden2, nout)
+        self.P_vec = Parameter(torch.FloatTensor(torch.ones((edge_index.size(1),))))
         self.loss_func = torch.nn.BCEWithLogitsLoss()
 
     def __L1__(self):
@@ -169,40 +156,41 @@ class GCNSyntheticPerturb(nn.Module):
     #     # Think more about how to initialize this
     #     # nn.init.uniform_(self.P_vec, 0.0, 0.001)
 
-    def encode(self, x):
-        x = self.conv1(x, self.edge_index, self.P_vec.sigmoid())
-        x = x.relu()
-        x = self.conv2(x, self.edge_index, self.P_vec.sigmoid())
+    def forward(self, x, adj):
+        x = F.relu(self.gc1(x, adj, self.P_vec.sigmoid()))
+        x = F.relu(self.gc2(x, adj, self.P_vec.sigmoid()))
         return x
 
-    def encode_prediction(self, x):
+    def forward_prediction(self, x, adj):
         # Same as forward but uses P instead of P_hat ==> non-differentiable
         # but needed for actual predictions
         P_vec = (self.P_vec.sigmoid() >= 0.5).float()
-        x = self.conv1(x, self.edge_index, P_vec)
-        x = x.relu()
-        x = self.conv2(x, self.edge_index, P_vec)
+        x = F.relu(self.gc1(x, adj, P_vec))
+        x = F.relu(self.gc2(x, adj, P_vec))
         return x
 
-    def decode(self, z, test_edge_index): # only pos and neg edges
-        logits = (z[test_edge_index[0]] * z[test_edge_index[1]]).sum(dim=-1)  # dot product
-        return logits
+    def link_pred(self, x_i, x_j, sigmoid=True):
+        x = x_i * x_j
+        x = self.lin(x)
+        if sigmoid:
+            x = torch.sigmoid(x)
+        return x
 
-    def decode_all(self, z):
-        prob_adj = z @ z.t() # get adj NxN
-        return (prob_adj > 0).nonzero(as_tuple=False).t() # get predicted edge_list
+    def get_explanation(self, adj):
+        P_vec = (self.P_vec.sigmoid() >= 0.5).float()
+        expl = P_vec*adj
+        return expl
 
-    def loss(self, x, test_edge_index, link_label, l1=1, l2=1, ae=1, dist=1):
+    def loss(self, node_emb, edges, link_label, l1=1, l2=1, ae=1, dist=1):
 
-        z = self.encode(x)  # encode
-        link_logits = self.decode(z, test_edge_index)  # decode
-        loss_perturb = self.loss_func(link_logits, link_label)
+        link_logits = self.link_pred(node_emb[edges[0]], node_emb[edges[1]], sigmoid=False)
+        loss_perturb = self.loss_func(link_logits, link_label.reshape(link_logits.shape))
         L1 = self.__L1__()
         L2 = self.__L2__()
         # if self.cf_expl is False:
         #     closs = cross_loss(output.unsqueeze(dim=0), y_orig_onehot.argmax(keepdims=True))
         loss_total = loss_perturb + l1 * self.psi_l1 * L1 + l2 * L2
-        return loss_total
+        return loss_total, torch.sigmoid(link_logits)
 
     def loss__(self, graph_AE, x, output, y_orig_onehot, l1=1, l2=1, ae=1, dist=1):
         closs = 0

@@ -43,8 +43,8 @@ class GCN(nn.Module):
 class GraphSparseConv(nn.Module):
     def __init__(self, num_features, num_hidden1, num_hidden2, nout=1, device='cuda'):
         super(GraphSparseConv, self).__init__()
-        self.gc1 = GCNConv(num_features, num_hidden1)
-        self.gc2 = GCNConv(num_hidden1, num_hidden2)
+        self.gc1 = GCNConv(num_features, num_hidden1, aggr='mean')
+        self.gc2 = GCNConv(num_hidden1, num_hidden2, aggr='mean')
         self.lin = nn.Linear(num_hidden2, nout)
         self.loss_func = nn.BCEWithLogitsLoss()
         self.device = device
