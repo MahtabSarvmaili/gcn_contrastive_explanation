@@ -19,14 +19,14 @@ from gae.utils import preprocess_graph
 from layers import GraphConvolution
 
 
-def gcn_norm(edge_index, P_vec=None, num_nodes=None, in_features=None, flow="source_to_target"):
+def gcn_norm(edge_index, P_vec=None, num_nodes=None, flow="source_to_target"):
 
     fill_value = 1.
 
     assert flow in ["source_to_target", "target_to_source"]
     num_nodes = maybe_num_nodes(edge_index, num_nodes)
     edge_index, tmp_edge_weight = add_remaining_self_loops(
-        edge_index, P_vec, fill_value, in_features)
+        edge_index, P_vec, fill_value, num_nodes)
 
     edge_weight = tmp_edge_weight.to(edge_index.device)
     row, col = edge_index[0], edge_index[1]
@@ -74,8 +74,12 @@ def cross_loss(output, y):
 
 
 class GraphConvolutionPerturb(MessagePassing):
-    def __init__(self, in_channels, out_channels, edge_index_size, bias=True):
-        super(GraphConvolutionPerturb, self).__init__()
+    def __init__(self, in_channels, out_channels, edge_index_size, bias: bool = True, **kwargs):
+
+        kwargs.setdefault('aggr', 'add')
+        super().__init__(**kwargs)
+
+        super(GraphConvolutionPerturb, self).__init__(**kwargs)
         self.in_features = in_channels
         self.out_features = out_channels
         self.lin = torch.nn.Linear(in_channels, out_channels, bias=False)
@@ -95,8 +99,7 @@ class GraphConvolutionPerturb(MessagePassing):
         # _, edge_weight = gcn_norm(edge_index, self.P_vec, self.num_nodes)
 
         # Step 2: Linearly transform node feature matrix.
-        edge_index, edge_weight = gcn_norm(  # yapf: disable
-            edge_index, P_vec, x.size(self.node_dim), self.in_features)
+        edge_index, edge_weight = gcn_norm(edge_index, P_vec, x.size(self.node_dim))
         x = self.lin(x)
         # Step 3-5: Start propagating messages.
         out = self.propagate(edge_index, x=x, edge_weight=edge_weight, size=None)
@@ -137,8 +140,12 @@ class GCNSyntheticPerturb(nn.Module):
         # learn vector representing entries in upper/lower triangular matrix and use to populate P_hat later
         # Initializing P_vec as vector of zeros
         # self.reset_parameters()
-        self.gc1 = GraphConvolutionPerturb(num_features, num_hidden1, edge_index_size=edge_index.size(1))
-        self.gc2 = GraphConvolutionPerturb(num_hidden1, num_hidden2, edge_index_size=edge_index.size(1))
+        self.gc1 = GraphConvolutionPerturb(
+            num_features, num_hidden1, edge_index_size=edge_index.size(1), aggr='mean'
+        )
+        self.gc2 = GraphConvolutionPerturb(
+            num_hidden1, num_hidden2, edge_index_size=edge_index.size(1), aggr='mean'
+        )
         self.lin = nn.Linear(num_hidden2, nout)
         self.P_vec = Parameter(torch.FloatTensor(torch.ones((edge_index.size(1),))))
         self.loss_func = torch.nn.BCEWithLogitsLoss()
@@ -177,8 +184,8 @@ class GCNSyntheticPerturb(nn.Module):
         return x
 
     def get_explanation(self, adj):
-        P_vec = (self.P_vec.sigmoid() >= 0.5).float()
-        expl = P_vec*adj
+        P_vec = (self.P_vec.sigmoid() >= 0.5)
+        expl = adj[:, P_vec]
         return expl
 
     def loss(self, node_emb, edges, link_label, l1=1, l2=1, ae=1, dist=1):
@@ -190,7 +197,8 @@ class GCNSyntheticPerturb(nn.Module):
         # if self.cf_expl is False:
         #     closs = cross_loss(output.unsqueeze(dim=0), y_orig_onehot.argmax(keepdims=True))
         loss_total = loss_perturb + l1 * self.psi_l1 * L1 + l2 * L2
-        return loss_total, torch.sigmoid(link_logits)
+        pred_labels = torch.sigmoid(link_logits) >= 0.5
+        return loss_total, pred_labels
 
     def loss__(self, graph_AE, x, output, y_orig_onehot, l1=1, l2=1, ae=1, dist=1):
         closs = 0

@@ -90,12 +90,10 @@ def main(explainer_args):
         if name.endswith("weight") or name.endswith("bias"):
             param.requires_grad = False
     explainer_optimizer = torch.optim.Adam(explainer.parameters(), lr=0.01)
-    node_embed = model(data['test'].x, data['test'].edge_index)
 
     test_labels = data['test'].edge_label
-    test_edges = data['test'].edge_label_index.t()
     explanations = []
-    for i, edge_id in enumerate(test_edges):
+    for i, edge_id in enumerate(data['test'].edge_label_index.t()[:10]):
         for j in range(explainer_args.explainer_epochs):
             explainer_optimizer.zero_grad()
             node_embed = explainer(data['test'].x, data['test'].edge_index)
@@ -105,7 +103,10 @@ def main(explainer_args):
             explainer_optimizer.step()
             if explainer_args.expl_type=='PT' or  explainer_args.expl_type=='EXE':
                 if pred_label == test_labels[i]:
-                    explanations.append(explainer.get_explanation())
+                    explanations.append(explainer.get_explanation(data['test'].edge_index))
+            if explainer_args.expl_type=='CF':
+                if pred_label != test_labels[i]:
+                    explanations.append(explainer.get_explanation(data['test'].edge_index))
 
 
     # # link_logits = model.link_pred(z[])  # decode
@@ -256,6 +257,7 @@ if __name__ == '__main__':
     parser.add_argument('--hidden2', type=int, default=50, help='Number of units in hidden layer 1.')
     parser.add_argument('--lr', type=float, default=0.009, help='Initial learning rate.')
     parser.add_argument('--bb_training_mode', type=bool, default=True, help='Initial learning rate.')
+    parser.add_argument('--expl_type', type=str, default='CF', help='Type of explanation.')
 
     parser.add_argument('--cf_lr', type=float, default=0.009, help='CF-explainer learning rate.')
     parser.add_argument('--dropout', type=float, default=0.1, help='Dropout rate (1 - keep probability).')
