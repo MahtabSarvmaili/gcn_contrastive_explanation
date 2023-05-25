@@ -1,5 +1,4 @@
-from datetime import datetime
-import networkx as nx
+import gc
 import torch
 from torch_geometric.utils import dense_to_sparse
 import pandas as pd
@@ -19,10 +18,9 @@ def gen_graph(nodes, edge_list):
 
 def centrality(graph:nx.Graph):
     centrality_metrics = {}
-    centrality_metrics['brandes'] = nx.betweenness_centrality(graph)
     centrality_metrics['closeness'] = nx.closeness_centrality(graph)
     centrality_metrics['betweenness'] = nx.betweenness_centrality(graph)
-
+    gc.collect()
     return centrality_metrics
 
 
@@ -64,6 +62,7 @@ def graph_evaluation_metrics(
     cf_expl_sparsity = []
     sub_graph_fid = []
     for i in range(len(cf_examples)):
+        print(f'processing {i}th explanation')
         cf_adj = torch.from_numpy(cf_examples[i][2]).cuda()
         a = cf_examples[i][8]
         f = (a == b.argmax(dim=1).cpu()).sum() / a.__len__()

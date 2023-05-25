@@ -183,10 +183,11 @@ class GCNSyntheticPerturb(nn.Module):
             x = torch.sigmoid(x)
         return x
 
-    def get_explanation(self, adj):
+    def get_explanation(self, node_emb, edges):
         P_vec = (self.P_vec.sigmoid() >= 0.5)
-        expl = adj[:, P_vec]
-        return expl
+        expl = edges[:, P_vec]
+        preds = (self.link_pred(node_emb[edges[0]], node_emb[edges[1]]) >= 0.5).float()
+        return expl, preds
 
     def loss(self, node_emb, edges, link_label, l1=1, l2=1, ae=1, dist=1):
 

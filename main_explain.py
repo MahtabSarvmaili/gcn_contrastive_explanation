@@ -16,6 +16,7 @@ from sklearn.metrics import precision_recall_fscore_support
 from cf_explainer import CFExplainer
 from gae.GAE import gae
 from evaluation.evaluation import evaluate_cf_PN, evaluate_cf_PP, swap_edges
+from evaluation.link_prediction_evaluation import graph_evaluation_metrics
 from gnn_models.gcn_model import GCN, GraphSparseConv
 from gnn_models.gcn_perturbation import GCNSyntheticPerturb
 
@@ -90,23 +91,40 @@ def main(explainer_args):
         if name.endswith("weight") or name.endswith("bias"):
             param.requires_grad = False
     explainer_optimizer = torch.optim.Adam(explainer.parameters(), lr=0.01)
-
     test_labels = data['test'].edge_label
+
+    if explainer_args.expl_type == 'CF':
+        expl_train_labels = (~(data['test'].edge_label > 0)).float()
+    else:
+        expl_train_labels = data['test'].edge_label
     explanations = []
-    for i, edge_id in enumerate(data['test'].edge_label_index.t()[:10]):
-        for j in range(explainer_args.explainer_epochs):
+    expls_preds = []
+
+    node_embeds = model(data['test'].x, data['test'].edge_index)
+    predicted_edge_labels = model.link_pred(node_embeds[data['test'].edge_index[0]], node_embeds[data['test'].edge_index[1]]) >= 0.5
+
+    for i, edge_id in enumerate(data['test'].edge_label_index.t()[:1]):
+
+        for j in range(300):
             explainer_optimizer.zero_grad()
             node_embed = explainer(data['test'].x, data['test'].edge_index)
-            loss_total, pred_label = explainer.loss(node_embed, edge_id, test_labels[i])
+            loss_total, pred_label = explainer.loss(node_embed, edge_id, expl_train_labels[i])
+            expl, preds = explainer.get_explanation(node_embed, data['test'].edge_index)
+
+            if explainer_args.expl_type == 'PT' or explainer_args.expl_type == 'EXE':
+                if pred_label == test_labels[i] and expl.shape != data['test'].edge_index:
+                    explanations.append(expl)
+                    expls_preds.append(preds.detach().cpu().numpy())
+            if explainer_args.expl_type == 'CF':
+                if pred_label != test_labels[i] and expl.shape != data['test'].edge_index.shape:
+                    explanations.append(expl)
+                    expls_preds.append(preds.detach().cpu().numpy())
+
             loss_total.backward()
             clip_grad_norm_(explainer.parameters(), 2.0)
             explainer_optimizer.step()
-            if explainer_args.expl_type=='PT' or  explainer_args.expl_type=='EXE':
-                if pred_label == test_labels[i]:
-                    explanations.append(explainer.get_explanation(data['test'].edge_index))
-            if explainer_args.expl_type=='CF':
-                if pred_label != test_labels[i]:
-                    explanations.append(explainer.get_explanation(data['test'].edge_index))
+
+        graph_evaluation_metrics(data['test'].edge_index, predicted_edge_labels, explanations, expls_preds, data['n_nodes'])
 
 
     # # link_logits = model.link_pred(z[])  # decode
