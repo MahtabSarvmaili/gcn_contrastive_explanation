@@ -225,3 +225,41 @@ def load_synthetic_AE(gen_syn_func, device='cuda'):
         'num_classes': len(dt.y.unique()),
         'all_edge_index':all_edge_index
     }
+
+
+# generalize data loading to graph classification dataset
+def __load__(dataset_func, dataset_str, transformer):
+    function = globals()[dataset_func]
+    path = osp.join(osp.dirname(osp.realpath(__file__)), dataset_func).replace("\\", "/")
+    dataset = function(path, dataset_str, transform=transformer)
+    return dataset
+
+
+def load_data_(args, xx):
+    function = globals()[args.dataset_func]
+    path = osp.join(osp.dirname(osp.realpath(__file__)), args.dataset_func).replace("\\", "/")
+    dataset = function(path, args.dataset_str)
+
+    transformer = T.Compose([
+        T.ToDevice(args.device),
+        T.NormalizeFeatures(),
+        T.RandomLinkSplit(num_val=0.2, num_test=0.1, is_undirected=True, add_negative_train_samples=True)
+    ])
+    for i in range(xx):
+
+        train, val, test = transformer(dataset[i])
+        adj = to_dense_adj(train['edge_index'], max_num_nodes=train['x'].size(0)).squeeze(0)
+        train['adj'] = normalize_adj(adj, args.device)
+        train.train_mask = train.val_mask = train.test_mask = None
+        val.train_mask = val.val_mask = val.test_mask = None
+        test.train_mask = train.val_mask = train.test_mask = None
+        adj = to_dense_adj(test['edge_index'], max_num_nodes=test['x'].size(0)).squeeze(0)
+        test['adj'] = normalize_adj(adj, args.device)
+
+        yield {
+            'train': train,
+            'val': val,
+            'test': test,
+            'n_nodes': train.x.size(0),
+            'n_features': train.x.size(1)
+        }

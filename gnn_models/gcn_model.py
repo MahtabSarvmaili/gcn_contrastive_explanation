@@ -47,13 +47,14 @@ class GraphSparseConv(nn.Module):
         self.gc2 = GCNConv(num_hidden1, num_hidden2, aggr='mean')
         self.lin = nn.Linear(num_hidden2, nout)
         self.loss_func = nn.BCEWithLogitsLoss()
+        self.dropout = 0.2
         self.device = device
 
     def forward(self, x, adj):
         x = F.relu(self.gc1(x, adj))
-        # x = F.dropout(x, self.dropout, training=False)
+        x = F.dropout(x, self.dropout, training=False)
         x = F.relu(self.gc2(x, adj))
-        # x = F.dropout(x, self.dropout, training=False)
+        x = F.dropout(x, self.dropout, training=False)
         return x
 
     def link_pred(self, x_i, x_j, sigmoid=True):

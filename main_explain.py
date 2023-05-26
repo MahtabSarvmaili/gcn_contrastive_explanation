@@ -48,13 +48,15 @@ def main(explainer_args):
     model.train()
 
     for e in range(200):
-        for edge_id in DataLoader(range(data['train'].edge_label_index.size(-1)), batch_size=256, shuffle=True):
+        for edge_id in DataLoader(
+                range(data['train'].edge_label_index.size(-1)), batch_size=explainer_args.batch_size, shuffle=True
+        ):
             model.train()
             optimizer.zero_grad()
             # node_embed = model(data['train'].x, data['train'].adj)
             node_embed = model(data['train'].x, data['train'].edge_index)
             edges = data['train'].edge_label_index.t()[edge_id].T
-            labels = data['train'].edge_label[edge_id].reshape(-1,1)
+            labels = data['train'].edge_label[edge_id].reshape(-1, 1)
 
             train_loss = model.loss(node_embed, edges, labels)
             train_loss.backward()
@@ -99,13 +101,13 @@ def main(explainer_args):
         expl_train_labels = data['test'].edge_label
     explanations = []
     expls_preds = []
-
     node_embeds = model(data['test'].x, data['test'].edge_index)
     predicted_edge_labels = model.link_pred(node_embeds[data['test'].edge_index[0]], node_embeds[data['test'].edge_index[1]]) >= 0.5
 
     for i, edge_id in enumerate(data['test'].edge_label_index.t()[:1]):
 
         for j in range(300):
+
             explainer_optimizer.zero_grad()
             node_embed = explainer(data['test'].x, data['test'].edge_index)
             loss_total, pred_label = explainer.loss(node_embed, edge_id, expl_train_labels[i])
@@ -119,7 +121,6 @@ def main(explainer_args):
                 if pred_label != test_labels[i] and expl.shape != data['test'].edge_index.shape:
                     explanations.append(expl)
                     expls_preds.append(preds.detach().cpu().numpy())
-
             loss_total.backward()
             clip_grad_norm_(explainer.parameters(), 2.0)
             explainer_optimizer.step()
@@ -127,142 +128,6 @@ def main(explainer_args):
         graph_evaluation_metrics(data['test'].edge_index, predicted_edge_labels, explanations, expls_preds, data['n_nodes'])
 
 
-    # # link_logits = model.link_pred(z[])  # decode
-
-    # link_labels = get_link_labels(data.train_pos_edge_index, neg_edge_index, device=gae_args.device)
-    #
-    # loss.backward()
-    # optimizer.step()
-    #
-    # model = train(
-    #     model=model,
-    #     features=data['features'],
-    #     train_adj=data['adj_norm'],
-    #     labels=data['labels'],
-    #     train_mask=data['train_mask'],
-    #     optimizer=optimizer,
-    #     epoch=explainer_args.bb_epochs,
-    #     val_mask=data['val_mask'],
-    #     dataset_name=explainer_args.dataset_str
-    # )
-    # model.eval()
-    # output = model(data['features'], data['adj_norm'])
-    # y_pred_orig = torch.argmax(output, dim=1)
-    # print("test set y_true counts: {}".format(
-    #     np.unique(data['labels'][data['test_mask']].cpu().detach().numpy(), return_counts=True)))
-    # print(
-    #     "test set y_pred_orig counts: {}".format(
-    #         np.unique(y_pred_orig[data['test_mask']].cpu().detach().numpy(), return_counts=True)
-    #     )
-    # )
-    # print("Training GNN is finished.")
-    #
-    # print("Training AE.")
-    # graph_ae = gae(gae_args, data_AE)
-    # print("Explanation step:")
-    #
-    # idx_test = np.arange(0, data['n_nodes'])[data['test_mask'].cpu()]
-    # test_cf_examples = []
-    # for i in idx_test:
-    #     try:
-    #         sub_adj, sub_feat, sub_labels, node_dict, sub_edge_index = get_neighbourhood(
-    #             int(i), data['edge_index'],
-    #             explainer_args.n_layers + 1,
-    #             data['features'], output.argmax(dim=1)
-    #         )
-    #
-    #         new_idx = node_dict[int(i)]
-    #         sub_output = model(sub_feat, normalize_adj(sub_adj, explainer_args.device)).argmax(dim=1)
-    #         # Check that original model gives same prediction on full graph and subgraph
-    #         with torch.no_grad():
-    #             print(f"Output original model, normalized - actual label: {data['labels'][i]}")
-    #             print(f"Output original model, full adj: {output[i].argmax()}")
-    #             print(
-    #                 f"Output original model, not normalized - sub adj: {sub_output[new_idx]}"
-    #             )
-    #         # Need to instantitate new cf model every time because size of P changes based on size of sub_adj
-    #         explainer = CFExplainer(
-    #             model=model,
-    #             graph_ae=graph_ae,
-    #             sub_adj=sub_adj,
-    #             sub_feat=sub_feat,
-    #             n_hid=explainer_args.hidden,
-    #             dropout=explainer_args.dropout,
-    #             cf_optimizer=explainer_args.cf_optimizer,
-    #             lr=explainer_args.cf_lr,
-    #             n_momentum=explainer_args.n_momentum,
-    #             sub_labels=sub_labels,
-    #             y_pred_orig=sub_labels[new_idx],
-    #             num_classes=data['num_classes'],
-    #             beta=explainer_args.beta,
-    #             device=explainer_args.device,
-    #             cf_expl=explainer_args.cf_expl,
-    #             algorithm=explainer_args.algorithm,
-    #         )
-    #         explainer.cf_model.cuda()
-    #         cf_example = explainer.explain(
-    #             node_idx=i,
-    #             new_idx=new_idx,
-    #             num_epochs=explainer_args.cf_epochs,
-    #             path=f'{explainer_args.graph_result_dir}/'
-    #             f'{explainer_args.dataset_str}/'
-    #             f'cf_expl_{explainer_args.cf_expl}/'
-    #             f'{explainer_args.algorithm}/'
-    #             f'_{i}_loss_.png'
-    #         )
-    #         min_sum = 10000
-    #         min_idx = 0
-    #         for ii, x in enumerate(cf_example):
-    #             if x[2].sum() < min_sum and x[2].sum()>0:
-    #                 min_sum = x[2].sum()
-    #                 min_idx = ii
-    #         cf_example_p_list = []
-    #         # stability evaluation
-    #         sub_adj_p_list = swap_edges(sub_adj, sub_edge_index, 1)
-    #         for sub_adj_p in sub_adj_p_list:
-    #             explainer = CFExplainer(
-    #                 model=model,
-    #                 graph_ae=graph_ae,
-    #                 sub_adj=sub_adj_p,
-    #                 sub_feat=sub_feat,
-    #                 n_hid=explainer_args.hidden,
-    #                 dropout=explainer_args.dropout,
-    #                 cf_optimizer=explainer_args.cf_optimizer,
-    #                 lr=explainer_args.cf_lr,
-    #                 n_momentum=explainer_args.n_momentum,
-    #                 sub_labels=sub_labels,
-    #                 y_pred_orig=sub_labels[new_idx],
-    #                 num_classes=data['num_classes'],
-    #                 beta=explainer_args.beta,
-    #                 device=explainer_args.device,
-    #                 cf_expl=explainer_args.cf_expl,
-    #                 algorithm=explainer_args.algorithm,
-    #             )
-    #             explainer.cf_model.cuda()
-    #             cf_example_p = explainer.explain(
-    #                 node_idx=i,
-    #                 new_idx=new_idx,
-    #                 num_epochs=explainer_args.cf_epochs,
-    #                 path=f'{explainer_args.graph_result_dir}/'
-    #                 f'{explainer_args.dataset_str}/'
-    #                 f'cf_expl_{explainer_args.cf_expl}/'
-    #                 f'{explainer_args.algorithm}/'
-    #                 f'_{i}_loss_.png'
-    #             )
-    #             cf_example_p_list.append(cf_example_p)
-    #
-    #         test_cf_examples.append(cf_example)
-    #         if explainer_args.cf_expl is True:
-    #             evaluate_cf_PN(explainer_args, model, sub_feat, sub_adj, sub_labels, sub_edge_index, new_idx, i, cf_example, cf_example_p_list)
-    #         else:
-    #             evaluate_cf_PP(explainer_args, model, sub_feat, sub_adj, sub_labels, sub_edge_index, new_idx, i, cf_example, cf_example_p_list)
-    #         print('yes!')
-    #
-    #         torch.cuda.empty_cache()
-    #         gc.collect()
-    #     except:
-    #         traceback.print_exc()
-    #         pass
 
 
 if __name__ == '__main__':
@@ -271,16 +136,17 @@ if __name__ == '__main__':
     parser.add_argument('--device', type=str, default='cuda', help='torch device.')
     parser.add_argument('--bb_epochs', type=int, default=500, help='Number of epochs to train the ')
     parser.add_argument('--explainer_epochs', type=int, default=300, help='Number of epochs to train the ')
-    parser.add_argument('--hidden1', type=int, default=100, help='Number of units in hidden layer 1.')
-    parser.add_argument('--hidden2', type=int, default=50, help='Number of units in hidden layer 1.')
+    parser.add_argument('--hidden1', type=int, default=300, help='Number of units in hidden layer 1.')
+    parser.add_argument('--hidden2', type=int, default=100, help='Number of units in hidden layer 1.')
     parser.add_argument('--lr', type=float, default=0.009, help='Initial learning rate.')
     parser.add_argument('--bb_training_mode', type=bool, default=True, help='Initial learning rate.')
     parser.add_argument('--expl_type', type=str, default='CF', help='Type of explanation.')
 
     parser.add_argument('--cf_lr', type=float, default=0.009, help='CF-explainer learning rate.')
+    parser.add_argument('--batch_size', type=int, default=256, help='batch size')
     parser.add_argument('--dropout', type=float, default=0.1, help='Dropout rate (1 - keep probability).')
     parser.add_argument('--cf_optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset_str', type=str, default='cora', help='type of dataset.')
+    parser.add_argument('--dataset_str', type=str, default='citeseer', help='type of dataset.')
     parser.add_argument('--dataset_func', type=str, default='Planetoid', help='type of dataset.')
     parser.add_argument('--beta', type=float, default=0.1, help='beta variable')
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
