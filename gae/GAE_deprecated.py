@@ -8,7 +8,7 @@ import torch
 from torch import optim
 from gae.model import GCNModelVAE
 from gae.loss import loss_function
-from gae.utils import get_roc_score
+from gae.utils_ae import get_roc_score
 torch.manual_seed(0)
 np.random.seed(0)
 

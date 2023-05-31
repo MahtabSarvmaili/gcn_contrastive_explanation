@@ -14,7 +14,7 @@ import torch_geometric.transforms as T
 from torch_geometric.utils import to_dense_adj
 from gae.model import GCNModelVAE
 from gae.loss import loss_function
-from gae.utils import load_data, mask_test_edges, preprocess_graph, get_roc_score
+from gae.utils_ae import load_data, mask_test_edges, preprocess_graph, get_roc_score
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--model', type=str, default='gcn_vae', help="models used")

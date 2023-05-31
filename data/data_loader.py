@@ -12,13 +12,15 @@ from sklearn.model_selection import StratifiedKFold
 from torch_geometric.datasets import Planetoid, TUDataset
 import torch_geometric.transforms as T
 from torch_geometric.data import Data
-from gae.utils import preprocess_graph, mask_test_edges
+from gae.utils_ae import preprocess_graph, mask_test_edges
 from utils import normalize, normalize_adj, sparse_mx_to_torch_sparse_tensor
 from data.gengraph import gen_syn1, preprocess_input_graph
 import networkx as nx
 torch.manual_seed(0)
 np.random.seed(0)
 
+
+sys.path.append('../..')
 
 def __k_fold__(x, y, folds, device='cuda'):
     skf = StratifiedKFold(folds, shuffle=True, random_state=12345)
@@ -139,19 +141,19 @@ def load_data_AE(args):
     transformer = T.Compose([
         T.ToDevice(args.device),
         T.NormalizeFeatures(),
-        T.RandomLinkSplit(num_val=0.05, num_test=0.1, is_undirected=True, add_negative_train_samples=True)
+        T.RandomLinkSplit(num_val=0.05, num_test=0.1, is_undirected=True, add_negative_train_samples=False)
     ])
     # for training, we exchange messages on all training edges
     # for validation, we exchange messages on all training edges
     # for testing, we exchange messages on all training and validation edges
     train, val, test = __load__data__(args.dataset_func, args.dataset_str, transformer)
-    adj = to_dense_adj(train['edge_index'], max_num_nodes=train['x'].size(0)).squeeze(0)
-    train['adj'] = normalize_adj(adj, args.device)
+    # adj = to_dense_adj(train['edge_index'], max_num_nodes=train['x'].size(0)).squeeze(0)
+    # train['adj'] = normalize_adj(adj, args.device)
     train.train_mask = train.val_mask = train.test_mask = None
     val.train_mask = val.val_mask = val.test_mask = None
     test.train_mask = train.val_mask = train.test_mask = None
-    adj = to_dense_adj(test['edge_index'], max_num_nodes=test['x'].size(0)).squeeze(0)
-    test['adj'] = normalize_adj(adj, args.device)
+    # adj = to_dense_adj(test['edge_index'], max_num_nodes=test['x'].size(0)).squeeze(0)
+    # test['adj'] = normalize_adj(adj, args.device)
 
     return {
         'train': train,
@@ -243,7 +245,7 @@ def load_data_(args, xx):
     transformer = T.Compose([
         T.ToDevice(args.device),
         T.NormalizeFeatures(),
-        T.RandomLinkSplit(num_val=0.2, num_test=0.1, is_undirected=True, add_negative_train_samples=True)
+        T.RandomLinkSplit(num_val=0.05, num_test=0.1, is_undirected=True, add_negative_train_samples=True)
     ])
     for i in range(xx):
 

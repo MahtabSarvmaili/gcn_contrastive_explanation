@@ -14,7 +14,6 @@ from torch_geometric.loader import DataLoader
 from torch.nn.utils import clip_grad_norm_
 from sklearn.metrics import precision_recall_fscore_support
 from cf_explainer import CFExplainer
-from gae.GAE import gae
 from evaluation.evaluation import evaluate_cf_PN, evaluate_cf_PP, swap_edges
 from evaluation.link_prediction_evaluation import graph_evaluation_metrics
 from gnn_models.gcn_model import GCN, GraphSparseConv
@@ -31,7 +30,6 @@ sys.path.append('../..')
 def main(explainer_args):
     log_file = os.getcwd() + explainer_args.model_dir
     torch.cuda.empty_cache()
-    # data = load_data(explainer_args)
     data = load_data_AE(explainer_args)
 
     model = GraphSparseConv(
@@ -42,26 +40,32 @@ def main(explainer_args):
         device=explainer_args.device
     )
     optimizer = torch.optim.Adam(model.parameters(), lr=explainer_args.lr, weight_decay=5e-6)
-    './re'
     model.to(explainer_args.device)
     p_ = r_ = f_ = 0
-    model.train()
 
     for e in range(200):
-        for edge_id in DataLoader(
-                range(data['train'].edge_label_index.size(-1)), batch_size=explainer_args.batch_size, shuffle=True
-        ):
-            model.train()
-            optimizer.zero_grad()
-            # node_embed = model(data['train'].x, data['train'].adj)
-            node_embed = model(data['train'].x, data['train'].edge_index)
-            edges = data['train'].edge_label_index.t()[edge_id].T
-            labels = data['train'].edge_label[edge_id].reshape(-1, 1)
 
-            train_loss = model.loss(node_embed, edges, labels)
-            train_loss.backward()
+        model.train()
+        optimizer.zero_grad()
+        node_embed = model(data['train'].x, data['train'].edge_index)
+        neg_edge_index = negative_sampling(
+            edge_index=data['train'].edge_index, num_nodes=data['train'].num_nodes,
+            num_neg_samples=data['train'].edge_label_index.size(1), method='sparse')
 
-            optimizer.step()
+        edge_label_index = torch.cat(
+            [data['train'].edge_label_index, neg_edge_index],
+            dim=-1,
+        )
+        edge_label = torch.cat([
+            data['train'].edge_label,
+            data['train'].edge_label.new_zeros(neg_edge_index.size(1))
+        ], dim=0)
+
+
+        train_loss = model.loss(node_embed, edge_label_index, edge_label)
+        train_loss.backward()
+
+        optimizer.step()
 
         if e % 5 == 0:
             with torch.no_grad():
@@ -69,10 +73,9 @@ def main(explainer_args):
                 # node_embed = model(data['val'].x, data['train'].adj)
                 node_embed = model(data['val'].x, data['val'].edge_index)
                 edges = data['val'].edge_label_index
-                labels = data['val'].edge_label.reshape(-1, 1)
+                labels = data['val'].edge_label
 
-                preds = model.link_pred(node_embed[edges[0]], node_embed[edges[1]]) >= 0.5
-
+                preds = model.link_pred(node_embed[edges[0]], node_embed[edges[1]]) > 0.5
                 val_loss = model.loss(node_embed, edges, labels)
                 p, r, f, _ = precision_recall_fscore_support(
                     labels.cpu().numpy(), preds.cpu().numpy(), average='macro'
@@ -106,7 +109,7 @@ def main(explainer_args):
 
     for i, edge_id in enumerate(data['test'].edge_label_index.t()[:1]):
 
-        for j in range(300):
+        for j in range(explainer_args.epochs):
 
             explainer_optimizer.zero_grad()
             node_embed = explainer(data['test'].x, data['test'].edge_index)
@@ -134,15 +137,15 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--device', type=str, default='cuda', help='torch device.')
-    parser.add_argument('--bb_epochs', type=int, default=500, help='Number of epochs to train the ')
+    parser.add_argument('--epochs', type=int, default=500, help='Number of epochs to train the ')
     parser.add_argument('--explainer_epochs', type=int, default=300, help='Number of epochs to train the ')
-    parser.add_argument('--hidden1', type=int, default=300, help='Number of units in hidden layer 1.')
-    parser.add_argument('--hidden2', type=int, default=100, help='Number of units in hidden layer 1.')
-    parser.add_argument('--lr', type=float, default=0.009, help='Initial learning rate.')
+    parser.add_argument('--hidden1', type=int, default=128, help='Number of units in hidden layer 1.')
+    parser.add_argument('--hidden2', type=int, default=64, help='Number of units in hidden layer 1.')
+    parser.add_argument('--lr', type=float, default=0.001, help='Initial learning rate.')
     parser.add_argument('--bb_training_mode', type=bool, default=True, help='Initial learning rate.')
     parser.add_argument('--expl_type', type=str, default='CF', help='Type of explanation.')
 
-    parser.add_argument('--cf_lr', type=float, default=0.009, help='CF-explainer learning rate.')
+    parser.add_argument('--cf_lr', type=float, default=0.001, help='CF-explainer learning rate.')
     parser.add_argument('--batch_size', type=int, default=256, help='batch size')
     parser.add_argument('--dropout', type=float, default=0.1, help='Dropout rate (1 - keep probability).')
     parser.add_argument('--cf_optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')

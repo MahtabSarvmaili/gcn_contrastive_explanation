@@ -13,7 +13,7 @@ from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.utils.num_nodes import maybe_num_nodes
 from torch_geometric.utils import add_remaining_self_loops, add_self_loops, degree
 from torch_scatter import scatter_add, scatter_sum
-from gae.utils import preprocess_graph
+from gae.utils_ae import preprocess_graph
 # torch.manual_seed(0)
 # np.random.seed(0)
 from layers import GraphConvolution
@@ -141,10 +141,10 @@ class GCNSyntheticPerturb(nn.Module):
         # Initializing P_vec as vector of zeros
         # self.reset_parameters()
         self.gc1 = GraphConvolutionPerturb(
-            num_features, num_hidden1, edge_index_size=edge_index.size(1), aggr='mean'
+            num_features, num_hidden1, edge_index_size=edge_index.size(1)
         )
         self.gc2 = GraphConvolutionPerturb(
-            num_hidden1, num_hidden2, edge_index_size=edge_index.size(1), aggr='mean'
+            num_hidden1, num_hidden2, edge_index_size=edge_index.size(1)
         )
         self.lin = nn.Linear(num_hidden2, nout)
         self.P_vec = Parameter(torch.FloatTensor(torch.ones((edge_index.size(1),))))

@@ -43,23 +43,19 @@ class GCN(nn.Module):
 class GraphSparseConv(nn.Module):
     def __init__(self, num_features, num_hidden1, num_hidden2, nout=1, device='cuda'):
         super(GraphSparseConv, self).__init__()
-        self.gc1 = GCNConv(num_features, num_hidden1, aggr='mean')
-        self.gc2 = GCNConv(num_hidden1, num_hidden2, aggr='mean')
-        self.lin = nn.Linear(num_hidden2, nout)
+        self.gc1 = GCNConv(num_features, num_hidden1)
+        self.gc2 = GCNConv(num_hidden1, num_hidden2)
         self.loss_func = nn.BCEWithLogitsLoss()
         self.dropout = 0.2
         self.device = device
 
     def forward(self, x, adj):
         x = F.relu(self.gc1(x, adj))
-        x = F.dropout(x, self.dropout, training=False)
-        x = F.relu(self.gc2(x, adj))
-        x = F.dropout(x, self.dropout, training=False)
+        x = self.gc2(x, adj)
         return x
 
     def link_pred(self, x_i, x_j, sigmoid=True):
-        x = x_i * x_j
-        x = self.lin(x)
+        x = (x_i * x_j).sum(dim=-1)
         if sigmoid:
             x = torch.sigmoid(x)
         return x
@@ -68,6 +64,9 @@ class GraphSparseConv(nn.Module):
         preds = self.link_pred(node_emb[edges[0]], node_emb[edges[1]], sigmoid=False)
         loss = self.loss_func(preds, labels)
         return loss
+    def decode_all(self, z):
+        prob_adj = z @ z.t()
+        return (prob_adj > 0).nonzero(as_tuple=False).t()
 
 
 class simple(nn.Module):
