@@ -49,24 +49,6 @@ def pertinent_negative_positive_loss(output, y_orig_onehot, const, kappa, positi
     return loss_perturb, max_nontarget_lab_score
 
 
-# def pertinent_negative_loss(output, y_orig_onehot, const, kappa):
-#     target_lab_score = (output * y_orig_onehot).sum(dim=0)
-#     max_nontarget_lab_score = (
-#             (1 - y_orig_onehot) * output -
-#             (y_orig_onehot * 10000)).max(dim=0).values
-#     loss_perturb = torch.max(const, -max_nontarget_lab_score + target_lab_score + kappa)
-#     return loss_perturb, max_nontarget_lab_score
-#
-#
-# def pertinent_positive_loss(output, y_orig_onehot, const, kappa):
-#     target_lab_score = (output * y_orig_onehot).sum(dim=0)
-#     max_nontarget_lab_score = (
-#             (1 - y_orig_onehot) * output -
-#             (y_orig_onehot * 10000)).max(dim=0).values
-#     loss_perturb = torch.max(const, max_nontarget_lab_score - target_lab_score + kappa)
-#     return loss_perturb, max_nontarget_lab_score
-
-
 def cross_loss(output, y):
     cross_loss = torch.nn.CrossEntropyLoss()
     closs = cross_loss(output, y)
@@ -136,17 +118,12 @@ class GCNSyntheticPerturb(nn.Module):
         self.gamma = torch.tensor(gamma, device=device)
         self.psi_l1 = torch.tensor(psi, device=device)
         self.cf_expl = cf_expl
-        # P_hat needs to be symmetric ==>
-        # learn vector representing entries in upper/lower triangular matrix and use to populate P_hat later
-        # Initializing P_vec as vector of zeros
-        # self.reset_parameters()
         self.gc1 = GraphConvolutionPerturb(
             num_features, num_hidden1, edge_index_size=edge_index.size(1)
         )
         self.gc2 = GraphConvolutionPerturb(
             num_hidden1, num_hidden2, edge_index_size=edge_index.size(1)
         )
-        self.lin = nn.Linear(num_hidden2, nout)
         self.P_vec = Parameter(torch.FloatTensor(torch.ones((edge_index.size(1),))))
         self.loss_func = torch.nn.BCEWithLogitsLoss()
 
@@ -159,64 +136,41 @@ class GCNSyntheticPerturb(nn.Module):
     def __loss_graph_dist__(self, cf_adj):
         return torch.dist(cf_adj , self.adj.cuda(), p=1) / 2
 
-    # def reset_parameters(self, eps=10 ** -4):
-    #     # Think more about how to initialize this
-    #     # nn.init.uniform_(self.P_vec, 0.0, 0.001)
-
     def forward(self, x, adj):
         x = F.relu(self.gc1(x, adj, self.P_vec.sigmoid()))
-        x = F.relu(self.gc2(x, adj, self.P_vec.sigmoid()))
+        x = self.gc2(x, adj, self.P_vec.sigmoid())
         return x
 
     def forward_prediction(self, x, adj):
         # Same as forward but uses P instead of P_hat ==> non-differentiable
         # but needed for actual predictions
-        P_vec = (self.P_vec.sigmoid() >= 0.5).float()
+        P_vec = (self.P_vec.sigmoid() > 0.5).float()
         x = F.relu(self.gc1(x, adj, P_vec))
-        x = F.relu(self.gc2(x, adj, P_vec))
+        x = self.gc2(x, adj, P_vec)
         return x
 
     def link_pred(self, x_i, x_j, sigmoid=True):
-        x = x_i * x_j
-        x = self.lin(x)
+        x = (x_i * x_j).sum(dim=-1)
         if sigmoid:
             x = torch.sigmoid(x)
         return x
 
     def get_explanation(self, node_emb, edges):
-        P_vec = (self.P_vec.sigmoid() >= 0.5)
+        P_vec = (self.P_vec.sigmoid() > 0.5)
         expl = edges[:, P_vec]
-        preds = (self.link_pred(node_emb[edges[0]], node_emb[edges[1]]) >= 0.5).float()
+        preds = (self.link_pred(node_emb[edges[0]], node_emb[edges[1]]) > 0.5).float()
         return expl, preds
 
-    def loss(self, node_emb, edges, link_label, l1=1, l2=1, ae=1, dist=1):
+    def loss(self, node_emb, node_emb_, edges, link_label, l1=1, l2=1, ae=1, dist=1):
 
         link_logits = self.link_pred(node_emb[edges[0]], node_emb[edges[1]], sigmoid=False)
         loss_perturb = self.loss_func(link_logits, link_label.reshape(link_logits.shape))
-        L1 = self.__L1__()
-        L2 = self.__L2__()
-        # if self.cf_expl is False:
-        #     closs = cross_loss(output.unsqueeze(dim=0), y_orig_onehot.argmax(keepdims=True))
-        loss_total = loss_perturb + l1 * self.psi_l1 * L1 + l2 * L2
-        pred_labels = torch.sigmoid(link_logits) >= 0.5
-        return loss_total, pred_labels
 
-    def loss__(self, graph_AE, x, output, y_orig_onehot, l1=1, l2=1, ae=1, dist=1):
-        closs = 0
-        if self.cf_expl is False:
-            loss_perturb, PLoss = pertinent_negative_positive_loss(output, y_orig_onehot, self.const, self.kappa, True)
-        else:
-            loss_perturb, PLoss = pertinent_negative_positive_loss(output, y_orig_onehot, self.const, self.kappa, False)
-        cf_adj = self.P * self.adj
-        cf_adj.requires_grad = True  # Need to change this otherwise loss_graph_dist has no gradient
-        loss_graph_dist = torch.dist(cf_adj , self.adj.cuda(), p=1) / 2
-        l2_AE = self.__AE_recons__(graph_AE, x, cf_adj)
         L1 = self.__L1__()
         L2 = self.__L2__()
-        # if self.cf_expl is False:
-        #     closs = cross_loss(output.unsqueeze(dim=0), y_orig_onehot.argmax(keepdims=True))
-        loss_total = loss_perturb + dist * self.beta * loss_graph_dist + l1 * self.psi_l1 * L1 + l2 * L2 + ae * self.gamma * l2_AE + closs
-        return loss_total, loss_perturb, loss_graph_dist, L1.item(), L2.item(), l2_AE.item(), cf_adj, PLoss.item()
+        loss_total = loss_perturb + l2 * L2 + l1 * self.psi_l1 * L1
+        pred_labels = self.link_pred(node_emb_[edges[0]], node_emb_[edges[1]]) > 0.5
+        return loss_total, pred_labels
 
     def single_test(self, x, test_pos_edge_index):
 

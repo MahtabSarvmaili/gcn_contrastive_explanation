@@ -89,32 +89,33 @@ def main(explainer_args):
     explainer = GCNSyntheticPerturb(
         data['n_features'], explainer_args.hidden1, explainer_args.hidden2, 1, data['test'].edge_index, data['n_nodes']
     )
+    explainer.load_state_dict(torch.load(log_file), strict=False)
     explainer.to(explainer_args.device)
-    # Copy GAE's parameters to the explainer
-    explainer.load_state_dict(model.state_dict(), strict=False)
     for name, param in explainer.named_parameters():
         if name.endswith("weight") or name.endswith("bias"):
             param.requires_grad = False
-    explainer_optimizer = torch.optim.Adam(explainer.parameters(), lr=0.01)
+    explainer_optimizer = torch.optim.Adam(explainer.parameters(), lr=explainer_args.cf_lr)
     test_labels = data['test'].edge_label
-
+    # based on the type of explanation changing the training label for explainer
     if explainer_args.expl_type == 'CF':
         expl_train_labels = (~(data['test'].edge_label > 0)).float()
     else:
         expl_train_labels = data['test'].edge_label
+
     explanations = []
     expls_preds = []
-    node_embeds = model(data['test'].x, data['test'].edge_index)
-    predicted_edge_labels = model.link_pred(node_embeds[data['test'].edge_index[0]], node_embeds[data['test'].edge_index[1]]) >= 0.5
 
-    for i, edge_id in enumerate(data['test'].edge_label_index.t()[:1]):
+    for i, edge_id in enumerate(data['test'].edge_label_index.t()[2:3]):
 
         for j in range(explainer_args.epochs):
 
             explainer_optimizer.zero_grad()
+
             node_embed = explainer(data['test'].x, data['test'].edge_index)
-            loss_total, pred_label = explainer.loss(node_embed, edge_id, expl_train_labels[i])
-            expl, preds = explainer.get_explanation(node_embed, data['test'].edge_index)
+            node_embed_ = explainer.forward_prediction(data['test'].x, data['test'].edge_index)
+
+            loss_total, pred_label = explainer.loss(node_embed, node_embed_, edge_id, expl_train_labels[i])
+            expl, preds = explainer.get_explanation(node_embed_, data['test'].edge_index)
 
             if explainer_args.expl_type == 'PT' or explainer_args.expl_type == 'EXE':
                 if pred_label == test_labels[i] and expl.shape != data['test'].edge_index:
@@ -125,10 +126,9 @@ def main(explainer_args):
                     explanations.append(expl)
                     expls_preds.append(preds.detach().cpu().numpy())
             loss_total.backward()
-            clip_grad_norm_(explainer.parameters(), 2.0)
             explainer_optimizer.step()
 
-        graph_evaluation_metrics(data['test'].edge_index, predicted_edge_labels, explanations, expls_preds, data['n_nodes'])
+        # graph_evaluation_metrics(data['test'].edge_index, predicted_edge_labels, explanations, expls_preds, data['n_nodes'])
 
 
 
@@ -145,7 +145,7 @@ if __name__ == '__main__':
     parser.add_argument('--bb_training_mode', type=bool, default=True, help='Initial learning rate.')
     parser.add_argument('--expl_type', type=str, default='CF', help='Type of explanation.')
 
-    parser.add_argument('--cf_lr', type=float, default=0.001, help='CF-explainer learning rate.')
+    parser.add_argument('--cf_lr', type=float, default=0.01, help='CF-explainer learning rate.')
     parser.add_argument('--batch_size', type=int, default=256, help='batch size')
     parser.add_argument('--dropout', type=float, default=0.1, help='Dropout rate (1 - keep probability).')
     parser.add_argument('--cf_optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
