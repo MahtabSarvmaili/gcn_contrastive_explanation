@@ -85,7 +85,9 @@ def main(explainer_args):
                     torch.save(model.state_dict(), log_file)
                     p_, r_, f_ = p, r, f
 
-    # explanation step
+    print('Model training has finished! \n')
+    print('Explanation step:')
+    model.load_state_dict(torch.load(log_file))
     explainer = GCNSyntheticPerturb(
         data['n_features'], explainer_args.hidden1, explainer_args.hidden2, 1, data['test'].edge_index, data['n_nodes']
     )
@@ -105,8 +107,11 @@ def main(explainer_args):
     explanations = []
     expls_preds = []
 
-    for i, edge_id in enumerate(data['test'].edge_label_index.t()[2:3]):
+    node_embeds = model(data['test'].x, data['test'].edge_index)
+    predicted_edge_labels = model.link_pred(node_embeds[data['test'].edge_index[0]], node_embeds[data['test'].edge_index[1]]) > 0.5
 
+    for i, edge_id in enumerate(data['test'].edge_label_index.t()[2:3]):
+        print(f' Explaining the predicted link {predicted_edge_labels[i].int()} between nodes {edge_id}')
         for j in range(explainer_args.epochs):
 
             explainer_optimizer.zero_grad()
@@ -122,15 +127,14 @@ def main(explainer_args):
                     explanations.append(expl)
                     expls_preds.append(preds.detach().cpu().numpy())
             if explainer_args.expl_type == 'CF':
-                if pred_label != test_labels[i] and expl.shape != data['test'].edge_index.shape:
+                if pred_label != test_labels[i] \
+                        and expl.shape != data['test'].edge_index.shape:
                     explanations.append(expl)
                     expls_preds.append(preds.detach().cpu().numpy())
             loss_total.backward()
             explainer_optimizer.step()
 
-        # graph_evaluation_metrics(data['test'].edge_index, predicted_edge_labels, explanations, expls_preds, data['n_nodes'])
-
-
+        graph_evaluation_metrics(data['test'].edge_index, predicted_edge_labels, explanations, expls_preds, data['n_nodes'])
 
 
 if __name__ == '__main__':

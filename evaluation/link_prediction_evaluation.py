@@ -31,7 +31,7 @@ def graph_evaluation_metrics(
         print(f'processing {j}th explanation')
         if not expl.shape.__contains__(0):
             expl_adj = to_dense_adj(edge_index=expl, max_num_nodes=num_nodes,).squeeze(dim=0)
-            g2 = gen_graph(list(range(num_nodes)), expl.cpu().t().numpy())
+            g2 = gen_graph(list(range(num_nodes)), expl.cpu().t().numpy())c
             g2_cent = centrality(g2)
             # a = cf_examples[i][8]
             f = (x == lbs).sum() / lbs.__len__()
@@ -64,6 +64,7 @@ def graph_evaluation_metrics(
                 )
 
             res.append([f, s, r, l, cl, be, p])
+            # res.append([f, s, r, l, p])
             gc.collect()
 
     # if cf_expl is True:
