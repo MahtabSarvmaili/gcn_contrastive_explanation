@@ -28,18 +28,14 @@ def graph_evaluation_metrics(
     #     fids.append(f)
 
     for x, expl, j in zip(expls_preds, explanation, list(range(len(explanation)))):
-        print(f'processing {j}th explanation')
+        print(f'processing {j}th explanation with number of connections as {expl.shape}')
         if not expl.shape.__contains__(0):
             expl_adj = to_dense_adj(edge_index=expl, max_num_nodes=num_nodes,).squeeze(dim=0)
-            g2 = gen_graph(list(range(num_nodes)), expl.cpu().t().numpy())c
+            g2 = gen_graph(list(range(num_nodes)), expl.cpu().t().numpy())
             g2_cent = centrality(g2)
-            # a = cf_examples[i][8]
             f = (x == lbs).sum() / lbs.__len__()
-            # f = f.cpu().numpy()
-            # cf_expl_fids.append(f)
             s = ((expl_adj < adj).sum())/(adj.shape[0]*adj.shape[0])
             s = s.item()
-            # cf_expl_sparsity.append(s)
             r = (expl_adj <adj).sum().item()
             l = torch.linalg.norm(adj, ord=1)
             l = l.item()
@@ -64,7 +60,7 @@ def graph_evaluation_metrics(
                 )
 
             res.append([f, s, r, l, cl, be, p])
-            # res.append([f, s, r, l, p])
+            print(f'Fidelity: {f}, Sparsity: {s}, Removed Connections: {r}, Betweenness: {be}, Closeness: {cl}')
             gc.collect()
 
     # if cf_expl is True:

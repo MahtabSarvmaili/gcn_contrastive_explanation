@@ -123,7 +123,7 @@ def main(explainer_args):
             expl, preds = explainer.get_explanation(node_embed_, data['test'].edge_index)
 
             if explainer_args.expl_type == 'PT' or explainer_args.expl_type == 'EXE':
-                if pred_label == test_labels[i] and expl.shape != data['test'].edge_index:
+                if pred_label == test_labels[i] and expl.shape != data['test'].edge_index.shape:
                     explanations.append(expl)
                     expls_preds.append(preds.detach().cpu().numpy())
             if explainer_args.expl_type == 'CF':
@@ -133,8 +133,16 @@ def main(explainer_args):
                     expls_preds.append(preds.detach().cpu().numpy())
             loss_total.backward()
             explainer_optimizer.step()
+        print(f'Explanation has finished, number of generated explanations: {len(explanations)}')
 
-        graph_evaluation_metrics(data['test'].edge_index, predicted_edge_labels, explanations, expls_preds, data['n_nodes'])
+        graph_evaluation_metrics(
+            data['test'].edge_index,
+            predicted_edge_labels,
+            explanations,
+            expls_preds,
+            data['n_nodes'],
+            f'{explainer_args.expl_type}_{explainer_args.dataset_str}_{edge_id.cpu().numpy()[0]}_{edge_id.cpu().numpy()[1]}'
+        )
 
 
 if __name__ == '__main__':
@@ -162,7 +170,6 @@ if __name__ == '__main__':
     parser.add_argument('--graph_result_name', type=str, default='loss_PN_AE', help='Result name')
     parser.add_argument('--cf_train_loss', type=str, default='loss_PN_AE',
                         help='CF explainer loss function')
-    parser.add_argument('--cf_expl', type=bool, default=True, help='CF explainer loss function')
     parser.add_argument('--n_momentum', type=float, default=0.5, help='Nesterov momentum')
     explainer_args = parser.parse_args()
 
