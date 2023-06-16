@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from clustering.main_dmon import DMon
 from visualization import plotClusters
-from model import GCN, train
+from model import GCN_dep, train
 from data.gengraph import gen_syn1
 from data.data_loader import load_synthetic, load_data
 
@@ -33,7 +33,7 @@ def main(explainer_args):
     data = load_synthetic(gen_syn1, 'cuda')
     # data = load_data(explainer_args)
     # dataset_name = 'cora'
-    model = GCN(
+    model = GCN_dep(
         nfeat=data['feat_dim'],
         nhid=explainer_args.hidden,
         nout=explainer_args.hidden,

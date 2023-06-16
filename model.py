@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+from torch_geometric.nn import global_mean_pool, GCNConv
 from layers import GraphConvolution
 from utils import accuracy
 from sklearn.utils.class_weight import compute_class_weight
@@ -10,106 +11,67 @@ from sklearn.utils.class_weight import compute_class_weight
 # np.random.seed(0)
 
 
-class GCN(nn.Module):
+class GCN_dep(nn.Module):
     def __init__(self, nfeat, nhid, nout, nclasses, dropout):
-        super(GCN, self).__init__()
+        super(GCN_dep, self).__init__()
         self.gc1 = GraphConvolution(nfeat, nhid)
         self.gc2 = GraphConvolution(nhid, nhid)
-        self.gc3 = GraphConvolution(nhid, nout)
-        self.lin = nn.Linear(nhid+nhid+nout, nclasses)
+        self.gc3 = GraphConvolution(nhid, nhid)
+        self.lin = nn.Linear(nout, nclasses)
         self.dropout = dropout
 
     def forward(self, x, adj, logit=True):
-        x1 = F.relu(self.gc1(x, adj))
-        x1 = F.dropout(x1, self.dropout, training=False)
-        x2 = F.relu(self.gc2(x1, adj))
-        x2 = F.dropout(x2, self.dropout, training=self.training)
-        x3 = self.gc3(x2, adj)
-        x = self.lin(torch.cat((x1, x2, x3), dim=1))
-        if logit:
-            return F.log_softmax(x, dim=1)
-        else:
-            return F.softmax(x)
-
-    def encode(self, x, adj):
-        x1 = F.relu(self.gc1(x, adj))
-        x1 = F.dropout(x1, self.dropout, training=False)
-        x2 = F.relu(self.gc2(x1, adj))
-        x2 = F.dropout(x2, self.dropout, training=self.training)
-        x3 = self.gc3(x2, adj)
-        return torch.cat((x1, x2, x3), dim=1)
+        x = F.relu(self.gc1(x, adj))
+        x = F.relu(self.gc2(x, adj))
+        x = self.gc3(x, adj)
+        x = global_mean_pool(x, None)
+        x = F.dropout(x, p=0.5, training=self.training)
+        x = self.lin(x)
+        return x
 
 
-def train(
-        model:nn.Module,
-        features,
-        train_adj,
-        labels,
-        train_mask,
-        optimizer: optim,
-        epoch,
-        val_mask,
-        dataset_name=''
-):
-    patience = 5
-    trigger_times = 0
-    prev_loss = np.inf
+class GCN(nn.Module):
+    def __init__(self, n_features, n_hidden, n_classes):
+        super(GCN, self).__init__()
+        self.conv1 = GCNConv(n_features, n_hidden)
+        self.conv2 = GCNConv(n_hidden, n_hidden)
+        self.conv3 = GCNConv(n_hidden, n_hidden)
+        self.lin = nn.Linear(n_hidden, n_classes)
 
+    def forward(self, x, edge_index, batch):
+        # 1. Obtain node embeddings
+        x = self.conv1(x, edge_index)
+        x = x.relu()
+        x = self.conv2(x, edge_index)
+        x = x.relu()
+        x = self.conv3(x, edge_index)
+
+        # 2. Readout layer
+        x = global_mean_pool(x, batch)  # [batch_size, hidden_channels]
+
+        # 3. Apply a final classifier
+        x = F.dropout(x, p=0.5, training=self.training)
+        x = self.lin(x)
+        return x
+
+
+def train(model, criterion, optimizer, train_loader):
     model.train()
-    # loss_tr_ = []
-    # loss_val_ = []
-    epochs_ = []
-    for i in range(epoch):
-        model.train()
-        optimizer.zero_grad()
-        preds = model.forward(features, train_adj)
-        loss_train = F.nll_loss(preds[train_mask], labels[train_mask])
-        # loss_train = F.nll_loss(preds[train_mask], labels[train_mask], weight=weights)
-        acc_train = accuracy(preds[train_mask], labels[train_mask])
-        loss_train.backward()
-        optimizer.step()
 
-        if i%10==0 and i!=0:
-            model.eval()
-            preds = model(features, train_adj)
-            loss_val = F.nll_loss(preds[val_mask], labels[val_mask])
-            acc_val = accuracy(preds[val_mask], labels[val_mask])
-            if prev_loss < loss_val:
-                trigger_times +=1
-                print('Trigger Times:', trigger_times)
-
-                if trigger_times >= patience:
-                    print('Early stopping!\nStart to test process.')
-                    break
-            else:
-                print('trigger times: 0')
-                trigger_times = 0
-            print('Epoch: {:04d}'.format(i),
-                  'loss_train: {:.4f}'.format(loss_train.item()),
-                  'acc_train: {:.4f}'.format(acc_train.item()),
-                  'loss_val: {:.4f}'.format(loss_val.item()),
-                  'acc_val: {:.4f}'.format(acc_val.item()))
-            prev_loss = loss_val
-            # loss_tr_.append(loss_train.cpu().detach().numpy())
-            # loss_val_.append(loss_val.cpu().detach().numpy())
-            epochs_.append(i)
-    return model
+    for data in train_loader:  # Iterate in batches over the training dataset.
+         out = model(data.x, data.edge_index, data.batch)  # Perform a single forward pass.
+         loss = criterion(out, data.y)  # Compute the loss.
+         loss.backward()  # Derive gradients.
+         optimizer.step()  # Update parameters based on gradients.
+         optimizer.zero_grad()  # Clear gradients.
 
 
-def test(
-        model: nn.Module,
-        features,
-        adj,
-        labels,
-        idx_test
-):
-    model.eval()
-    output = model(features, adj)
-    loss_test = F.nll_loss(output[idx_test], labels[idx_test])
-    acc_test = accuracy(output[idx_test], labels[idx_test])
-    print("Test set results:",
-          "loss= {:.4f}".format(loss_test.item()),
-          "accuracy= {:.4f}".format(acc_test.item()))
-    y_pred_orig = torch.argmax(output, dim=1)
-    print("y_true counts: {}".format(np.unique(labels.cpu().detach().numpy(), return_counts=True)))
-    print("y_pred_orig counts: {}".format(np.unique(y_pred_orig.cpu().detach().numpy(), return_counts=True)))
+def test(model, loader):
+     model.eval()
+     correct = 0
+     for data in loader:  # Iterate in batches over the training/test dataset.
+         out = model(data.x, data.edge_index, data.batch)
+         pred = out.argmax(dim=1)  # Use the class with highest probability.
+         correct += int((pred == data.y).sum())  # Check against ground-truth labels.
+     return correct / len(loader.dataset)  # Derive ratio of correct predictions.
+

@@ -6,10 +6,10 @@ import torch
 import numpy as np
 import os.path as osp
 import scipy.sparse as sp
-
+from torch_geometric.loader import DataLoader
 from torch_geometric.utils import to_dense_adj, train_test_split_edges, dense_to_sparse
 from sklearn.model_selection import StratifiedKFold
-from torch_geometric.datasets import Planetoid, TUDataset
+from torch_geometric.datasets import Planetoid, TUDataset, MoleculeNet
 import torch_geometric.transforms as T
 from torch_geometric.data import Data
 from gae.utils import preprocess_graph, mask_test_edges
@@ -215,4 +215,25 @@ def load_synthetic_AE(gen_syn_func, device='cuda'):
         'feat_dim': dt.num_features,
         'num_classes': len(dt.y.unique()),
         'all_edge_index':all_edge_index
+    }
+
+# loading data for graph classification
+def load_graph_data_(args, batch_size=64):
+    function = globals()[args.dataset_func]
+    path = osp.join(osp.dirname(osp.realpath(__file__)), args.dataset_func).replace("\\", "/")
+    transformer = T.Compose([
+        T.ToDevice(args.device),
+    ])
+    dataset = function(path, args.dataset_str,transformer)
+    dataset.shuffle()
+
+    train = dataset[:int(len(dataset)*0.85)]
+    test = dataset[int(len(dataset)*0.85):]
+    train = DataLoader(train, batch_size=batch_size, shuffle=True)
+    test = DataLoader(test, batch_size=batch_size, shuffle=True)
+    return {
+        'train': train,
+        'test': test,
+        'n_features': dataset.num_features,
+        'n_classes': dataset.num_classes
     }

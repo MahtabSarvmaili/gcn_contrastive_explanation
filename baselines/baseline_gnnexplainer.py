@@ -5,7 +5,7 @@ import torch
 import numpy as np
 from data.data_loader import load_data
 from utils import get_neighbourhood
-from model import GCN, train
+from model import GCN_dep, train
 from gnnexplainer import GNNExplainer
 from visualization import plot_graph
 from evaluation.evaluation import insertion, deletion
@@ -17,7 +17,7 @@ sys.path.append('../..')
 
 def main(explainer_args):
     data = load_data(explainer_args)
-    model = GCN(
+    model = GCN_dep(
         nfeat=data['feat_dim'],
         nhid=explainer_args.hidden,
         nout=explainer_args.hidden,
