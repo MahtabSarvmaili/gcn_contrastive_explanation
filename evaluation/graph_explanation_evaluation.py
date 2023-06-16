@@ -15,10 +15,8 @@ import networkx as nx
 def graph_evaluation_metrics(
         dt,
         explanation,
-        fig_name,
         args,
-        res_dir='tst.csv'
-
+        res_dir
 ):
     g1 = gen_graph(list(range(dt.x.shape[0])), dt.edge_index.cpu().t().numpy())
     g1_cent = centrality(g1)
@@ -48,10 +46,6 @@ def graph_evaluation_metrics(
 
             res.append([s, r, l, cl, be, p])
             print(f'Sparsity: {s}, Removed Connections: {r}, Betweenness: {be}, Closeness: {cl}')
-            plot_explanation_subgraph(
-                dt.edge_index, expl, dt.x.argmax(dim=1), dt.x.shape[0], dt.x.shape[1],
-                fig_name + f'\\{args.dataset_str}_{args.expl_type}_{j}_{expl.cpu().numpy().shape}.png'
-            )
             gc.collect()
 
     df = pd.DataFrame(
@@ -66,55 +60,52 @@ def graph_evaluation_metrics(
         ]
     )
     df.to_csv(
-        res_dir + f'\\{args.dataset_str}_{args.expl_type}_{explanation.cpu().numpy().shape}.csv'
+        res_dir + f'\\{args.dataset_str}_{args.expl_type}_{len(explanation)}.csv'
     )
 
 
-def plot_explanation_subgraph(
-        edge_index, exp_edge_index,
-        labels,
-        num_nodes, num_classes,
-        name='tst.png',
-
-):
-    colors = ['orange', 'green', 'blue', 'maroon', 'brown', 'darkslategray', 'paleturquoise', 'darksalmon',
-              'slategray', 'mediumseagreen', 'mediumblue', 'orchid', ]
-    colors = np.random.permutation(colors)
-
-    edge_list = [(i[0], i[1]) for i in edge_index.t().cpu().numpy()]
-    # only plotting the edges and neighboring nodes of the node_idx
-    pos_edges = [(u, v) for (u, v) in exp_edge_index.t().cpu().numpy()]
-    a = [x for x in edge_list if x not in pos_edges]
-    removed_edges = [x for x in edge_list if x not in pos_edges]
-    for (u, v) in a:
-        removed_edges.append((v, u))
-
-    label2nodes = []
-    for i in range(num_classes):
-        label2nodes.append([])
-    for i in range(num_nodes):
-        label2nodes[labels[i]].append(i)
-
-    G = nx.Graph()
-    G.add_nodes_from(list(range(num_nodes)))
-    G.add_edges_from(edge_list)
-    pos = nx.spring_layout(G)
-
-    plt.close()
-    for i in range(num_classes):
-        node_filter = []
-        for j in range(len(label2nodes[i])):
-            if label2nodes[i][j] in G.nodes():
-                node_filter.append(label2nodes[i][j])
-        nx.draw_networkx_nodes(G, pos,
-                               nodelist=node_filter,
-                               node_color=colors[i % len(colors)],
-                               node_size=18, label=str(i))
-
-    nx.draw_networkx_edges(G, pos, edgelist=pos_edges,
-                           width=1, alpha=1, edge_color='black')
-
-    nx.draw_networkx_edges(G, pos, edgelist=removed_edges,
-                           width=1, alpha=1, edge_color='red')
-    plt.savefig(name)
-    plt.close()
+# def plot_explanation_subgraph(
+#         edge_index, exp_edge_index,
+#         labels,
+#         num_nodes, num_classes,
+#         name='tst.png',
+#
+# ):
+#     colors = ['orange', 'green', 'blue', 'maroon', 'brown', 'darkslategray', 'paleturquoise', 'darksalmon',
+#               'slategray', 'mediumseagreen', 'mediumblue', 'orchid', ]
+#     colors = np.random.permutation(colors)
+#
+#     edge_list = [(i[0], i[1]) for i in edge_index.t().cpu().numpy()]
+#     # only plotting the edges and neighboring nodes of the node_idx
+#     pos_edges = [(u, v) for (u, v) in exp_edge_index.t().cpu().numpy()]
+#     removed_edges = [x for x in edge_list if x not in pos_edges]
+#
+#     label2nodes = []
+#     for i in range(num_classes):
+#         label2nodes.append([])
+#     for i in range(num_nodes):
+#         label2nodes[labels[i]].append(i)
+#
+#     G = nx.Graph()
+#     G.add_nodes_from(list(range(num_nodes)))
+#     G.add_edges_from(edge_list)
+#     pos = nx.spring_layout(G)
+#
+#     plt.close()
+#     for i in range(num_classes):
+#         node_filter = []
+#         for j in range(len(label2nodes[i])):
+#             if label2nodes[i][j] in G.nodes():
+#                 node_filter.append(label2nodes[i][j])
+#         nx.draw_networkx_nodes(G, pos,
+#                                nodelist=node_filter,
+#                                node_color=colors[i % len(colors)],
+#                                node_size=18, label=str(i))
+#
+#     nx.draw_networkx_edges(G, pos, edgelist=pos_edges,
+#                            width=1, alpha=1, edge_color='black')
+#
+#     nx.draw_networkx_edges(G, pos, edgelist=removed_edges,
+#                            width=1, alpha=1, edge_color='red')
+#     plt.savefig(name)
+#     plt.close()
