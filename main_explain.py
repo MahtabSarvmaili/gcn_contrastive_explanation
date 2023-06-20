@@ -36,32 +36,40 @@ def main(args):
         model = model.cuda()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=5e-4)
     criterion = torch.nn.CrossEntropyLoss()
-
-    for epoch in range(1, 171):
+    test_acc_prev = 0
+    for epoch in range(1, args.epochs):
         train(model, criterion, optimizer, data['train'])
         train_acc = test(model, data['train'])
         test_acc = test(model, data['test'])
         print(f'Epoch: {epoch:03d}, Train Acc: {train_acc:.4f}, Test Acc: {test_acc:.4f}')
+        if test_acc > test_acc_prev:
+            test_acc_prev = test_acc
+            torch.save(model.state_dict(), result_dir+f"\\{args.dataset_str}_{args.expl_type}_model.pt")
 
-    for dt in data['test'].dataset[:1]:
+    for dt_id, dt in enumerate(data['test'].dataset[:10]):
         expl_preds = []
         explanations = []
         print(f'Explanation for {dt} has started!')
         explainer = GCNPerturb(data['n_features'], args.hidden, data['n_classes'], dt.edge_index, dt.x.shape[0])
         explainer_optimizer = torch.optim.Adam(explainer.parameters(), lr=args.cf_lr)
-        explainer.load_state_dict(model.state_dict(), strict=False)
+
+        explainer.load_state_dict(
+            torch.load(result_dir+f"\\{args.dataset_str}_{args.expl_type}_model.pt"),
+            strict=False
+        )
         explainer.to(args.device)
         for name, param in explainer.named_parameters():
             if name.endswith("weight") or name.endswith("bias"):
                 param.requires_grad = False
         if args.expl_type == 'CF':
-            y = (~(dt.y > 0)).to(torch.int64)
+            y = (~(dt.y > 0)).to(torch.int64).reshape(-1,)
         else:
-            y = dt.y
+            y = dt.y.to(torch.int64).reshape(-1)
+
 
         for i in range(args.expl_epochs):
-            loss, _ = explainer.loss(dt.x, dt.edge_index, dt.batch, y)
-            expl, pred_y = explainer.get_explanation(dt.x, dt.edge_index, dt.batch)
+            loss, _ = explainer.loss(dt.x.to(torch.float), dt.edge_index, dt.batch, y)
+            expl, pred_y = explainer.get_explanation(dt.x.to(torch.float), dt.edge_index, dt.batch)
 
             if args.expl_type == 'PT' or args.expl_type == 'EXE':
                 if pred_y == dt.y and expl.shape != dt.edge_index.shape:
@@ -76,28 +84,28 @@ def main(args):
             loss.backward()
             explainer_optimizer.step()
         print(f'Explanation has finished, number of generated explanations: {len(explanations)}')
-        graph_evaluation_metrics(dt, explanations, args, result_dir)
+        graph_evaluation_metrics(dt, explanations, args, result_dir, dt_id)
         viz_exp = PlotGraphExplanation(
             dt.edge_index, dt.x.argmax(dim=1), dt.x.shape[0], dt.x.shape[1], args.expl_type, args.dataset_str
         )
         if args.expl_type == 'CF':
-            viz_exp.plot_cf(explanations, result_dir)
+            viz_exp.plot_cf(explanations, result_dir, dt_id)
         else:
-            viz_exp.plot_pt(explanations, result_dir)
+            viz_exp.plot_pt(explanations, result_dir, dt_id)
 
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--device', type=str, default='cuda', help='torch device.')
-    parser.add_argument('--bb_epochs', type=int, default=500, help='Number of epochs to train the ')
-    parser.add_argument('--expl_epochs', type=int, default=300, help='Number of epochs to train the ')
-    parser.add_argument('--expl_type', type=str, default='PT', help='Type of explanation.')
+    parser.add_argument('--epochs', type=int, default=200, help='Number of epochs to train the ')
+    parser.add_argument('--expl_epochs', type=int, default=200, help='Number of epochs to train the ')
+    parser.add_argument('--expl_type', type=str, default='CF', help='Type of explanation.')
     parser.add_argument('--hidden', type=int, default=64, help='Number of units in hidden layer 1.')
     parser.add_argument('--lr', type=float, default=0.009, help='Initial learning rate.')
-    parser.add_argument('--cf_lr', type=float, default=0.009, help='CF-explainer learning rate.')
+    parser.add_argument('--cf_lr', type=float, default=0.01, help='CF-explainer learning rate.')
     parser.add_argument('--dropout', type=float, default=0.2, help='Dropout rate (1 - keep probability).')
     parser.add_argument('--cf_optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset_str', type=str, default='AIDS', help='type of dataset.')
+    parser.add_argument('--dataset_str', type=str, default='NCI1', help='type of dataset.')
     parser.add_argument('--dataset_func', type=str, default='TUDataset', help='type of dataset.')
     parser.add_argument('--beta', type=float, default=0.1, help='beta variable')
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')

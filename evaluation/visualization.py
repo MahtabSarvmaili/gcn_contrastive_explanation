@@ -35,26 +35,24 @@ class PlotGraphExplanation:
         for i in range(self.num_nodes):
             self.label2nodes[labels[i]].append(i)
 
-        self.color = ["#" + ''.join([random.choice('0123456789ABCDEF') for j in range(6)])
-                 for i in range(self.num_classes)]
+        self.colors = ["#" + ''.join([random.choice('0123456789ABCDEF') for i in range(6)])
+                 for j in range(self.num_classes)]
 
-
-
-    def plot_cf(self, explanations, res_dir):
+    def plot_cf(self, explanations, res_dir, dt_id):
 
         for j, exp_edge_index in enumerate(explanations):
             pos_edges = [(u, v) for (u, v) in exp_edge_index.t().cpu().numpy()]
             removed_edges = [x for x in self.edge_list if x not in pos_edges]
             plt.close()
-            for i in range(self.num_classes):
+            for hh in range(self.num_classes):
                 node_filter = []
-                for j in range(len(self.label2nodes[i])):
-                    if self.label2nodes[i][j] in self.G.nodes():
-                        node_filter.append(self.label2nodes[i][j])
+                for zz in range(len(self.label2nodes[hh])):
+                    if self.label2nodes[hh][zz] in self.G.nodes():
+                        node_filter.append(self.label2nodes[hh][zz])
                 nx.draw_networkx_nodes(self.G, self.pos,
                                        nodelist=node_filter,
-                                       node_color=self.colors[i % len(self.colors)],
-                                       node_size=18, label=str(i))
+                                       node_color=self.colors[hh % len(self.colors)],
+                                       node_size=30, label=str(hh))
 
             nx.draw_networkx_edges(self.G, self.pos, edgelist=pos_edges,
                                    width=1, alpha=1, edge_color='black')
@@ -62,32 +60,32 @@ class PlotGraphExplanation:
             nx.draw_networkx_edges(self.G, self.pos, edgelist=removed_edges,
                                    width=1, alpha=1, edge_color='red')
             plt.savefig(
-                res_dir + f'\\{self.dataset}_{self.expl_type}_{j}_{exp_edge_index.cpu().numpy().shape}.png'
+                res_dir + f'\\{self.dataset}_{self.expl_type}_{dt_id}_{j}_{exp_edge_index.cpu().numpy().shape}.png'
             )
             plt.close()
 
-    def plot_pt(self, explanations, res_dir):
+    def plot_pt(self, explanations, res_dir, dt_id):
 
         for j, exp_edge_index in enumerate(explanations):
             pos_edges = [(u, v) for (u, v) in exp_edge_index.t().cpu().numpy()]
             plt.close()
-            for i in range(self.num_classes):
+            for hh in range(self.num_classes):
                 node_filter = []
-                for j in range(len(self.label2nodes[i])):
-                    if self.label2nodes[i][j] in self.G.nodes():
-                        node_filter.append(self.label2nodes[i][j])
+                for zz in range(len(self.label2nodes[hh])):
+                    if self.label2nodes[hh][zz] in self.G.nodes():
+                        node_filter.append(self.label2nodes[hh][zz])
                 nx.draw_networkx_nodes(self.G, self.pos,
                                        nodelist=node_filter,
-                                       node_color=self.colors[i % len(self.colors)],
-                                       node_size=18, label=str(i))
+                                       node_color=self.colors[hh % len(self.colors)],
+                                       node_size=30, label=str(hh))
 
             nx.draw_networkx_edges(self.G, self.pos,
                                    width=1, alpha=1, edge_color='grey', style=':')
             nx.draw_networkx_edges(self.G, self.pos, edgelist=pos_edges,
                                    width=1, alpha=1, edge_color='green')
 
-
+            plt.legend()
             plt.savefig(
-                res_dir + f'\\{self.dataset}_{self.expl_type}_{j}_{exp_edge_index.cpu().numpy().shape}.png'
+                res_dir + f'\\{self.dataset}_{self.expl_type}_{dt_id}_{j}_{exp_edge_index.cpu().numpy().shape}.png'
             )
             plt.close()

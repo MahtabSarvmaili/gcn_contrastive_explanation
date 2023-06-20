@@ -102,11 +102,11 @@ class GCNPerturb(nn.Module):
 
     def __init__(
             self, n_features, n_hidden, n_classes, edge_index, beta=0.1,
-            cf_expl=True, gamma=0.09, kappa=10, psi_l1=0.01, psi_l2=0.1, device='cuda'
+            cf_expl=True, gamma=0.09, kappa=10, psi_l1=0.001, psi_l2=0.1, device='cuda'
     ):
         # the best gamma and psi for prototype explanation are gamma=0.01, kappa=10, psi=0.09
         # the best gamma and psi for CF explanation are gamma=0.09, kappa=10, psi=0.01
-
+        # CF -> psi_l1=0.001, psi_l2=0.1 // PT -> psi_l1=0.1, psi_l2=0.01 // EXE -> psi_l1=0.1, psi_l2=0.01
         super(GCNPerturb, self).__init__()
         self.edge_index = edge_index
         self.beta = beta

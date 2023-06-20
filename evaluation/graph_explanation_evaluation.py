@@ -16,7 +16,8 @@ def graph_evaluation_metrics(
         dt,
         explanation,
         args,
-        res_dir
+        res_dir,
+        dt_id
 ):
     g1 = gen_graph(list(range(dt.x.shape[0])), dt.edge_index.cpu().t().numpy())
     g1_cent = centrality(g1)
@@ -60,7 +61,7 @@ def graph_evaluation_metrics(
         ]
     )
     df.to_csv(
-        res_dir + f'\\{args.dataset_str}_{args.expl_type}_{len(explanation)}.csv'
+        res_dir + f'\\{args.dataset_str}_{args.expl_type}_{dt_id}_{len(explanation)}.csv'
     )
 
 
