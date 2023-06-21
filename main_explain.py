@@ -105,7 +105,7 @@ if __name__ == '__main__':
     parser.add_argument('--cf_lr', type=float, default=0.01, help='CF-explainer learning rate.')
     parser.add_argument('--dropout', type=float, default=0.2, help='Dropout rate (1 - keep probability).')
     parser.add_argument('--cf_optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset_str', type=str, default='NCI1', help='type of dataset.')
+    parser.add_argument('--dataset_str', type=str, default='MUTAG', help='type of dataset.')
     parser.add_argument('--dataset_func', type=str, default='TUDataset', help='type of dataset.')
     parser.add_argument('--beta', type=float, default=0.1, help='beta variable')
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
