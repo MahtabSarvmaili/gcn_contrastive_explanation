@@ -3,7 +3,10 @@ import pandas as pd
 from scipy.spatial.distance import cosine
 from torch_geometric.utils import to_dense_adj, dense_to_sparse
 from evaluation.evaluation_metrics import gen_graph, centrality
+from sklearn.metrics import roc_auc_score
+
 import os, sys
+
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
 from torch_geometric.utils import dense_to_sparse
 import numpy as np
@@ -14,18 +17,25 @@ import networkx as nx
 
 def graph_evaluation_metrics(
         dt,
+        ground_dt,
         explanation,
+        edge_pred,
         args,
         res_dir,
-        dt_id
+        dt_id,
+        gnnexplainer_mask=None,
+        pgexplainer_mask=None
 ):
     g1 = gen_graph(list(range(dt.x.shape[0])), dt.edge_index.cpu().t().numpy())
     g1_cent = centrality(g1)
     res = []
+    gnn_acc = pg_acc = None
+    if None not in [gnnexplainer_mask, pgexplainer_mask]:
+        gnn_acc = roc_auc_score(ground_dt, gnnexplainer_mask)
+        pg_acc = roc_auc_score(ground_dt, pgexplainer_mask)
     adj = to_dense_adj(edge_index=dt.edge_index, max_num_nodes=dt.x.shape[0]).squeeze(dim=0)
 
     for j, expl in enumerate(explanation):
-        print(f'processing {j}th explanation with number of connections as {expl.shape}')
         if not expl.shape.__contains__(0):
             expl_adj = to_dense_adj(edge_index=expl, max_num_nodes=dt.x.shape[0]).squeeze(dim=0)
             g2 = gen_graph(list(range(dt.x.shape[0])), expl.cpu().t().numpy())
@@ -44,27 +54,32 @@ def graph_evaluation_metrics(
                     np.array(list(g1_cent['closeness'].values())),
                     np.array(list(g2_cent['closeness'].values()))
                 )
-
-            res.append([s, r, l, cl, be, p])
-            print(f'Sparsity: {s}, Removed Connections: {r}, Betweenness: {be}, Closeness: {cl}')
+            acc = roc_auc_score(ground_dt, edge_pred[j])
+            res.append([acc, s, r, l, cl, be, p, pg_acc, gnn_acc])
             gc.collect()
 
     df = pd.DataFrame(
         res,
         columns=[
+            'accuracy',
             'sparsity',
             'removed_edges',
             'loss_perturb',
             'closeness',
             'betweenness',
-            'present_edges'
+            'present_edges',
+            'pgexplainer',
+            'gnnexplainer'
         ]
     )
     df.to_csv(
-        res_dir + f'\\{args.dataset_str}_{args.expl_type}_{dt_id}_{len(explanation)}.csv'
+        res_dir + f'\\{args.dataset_str}_{args.expl_type}_{dt_id}_{len(explanation)}.csv', index=False
     )
+    print(
 
-
+        f'Quantitative evaluation of explanations has finished!\n'
+        f'AUC: {df["accuracy"].max()}, PGExplainer: {pg_acc}, GNNExplainer: {gnn_acc}'
+    )
 # def plot_explanation_subgraph(
 #         edge_index, exp_edge_index,
 #         labels,

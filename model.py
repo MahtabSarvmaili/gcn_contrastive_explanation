@@ -72,6 +72,6 @@ def test(model, loader):
     for data in loader:  # Iterate in batches over the training/test dataset.
         out = model(data.x.to(torch.float), data.edge_index, data.batch)  # Perform a single forward pass.
         pred = out.argmax(dim=1)  # Use the class with highest probability.
-        correct += int((pred == data.y).sum())  # Check against ground-truth labels.
+        correct += int((pred == data.y.to(torch.int64).reshape(-1)).sum())  # Check against ground-truth labels.
     return correct / len(loader.dataset)  # Derive ratio of correct predictions.
 

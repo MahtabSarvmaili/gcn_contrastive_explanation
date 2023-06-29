@@ -1,4 +1,4 @@
-import argparse
+import copy
 import sys
 
 sys.path.append('../../..')
@@ -225,15 +225,18 @@ def load_graph_data_(args, batch_size=64):
         T.ToDevice(args.device),
     ])
     dataset = function(path, args.dataset_str,transformer)
-    dataset.shuffle()
-
-    train = dataset[:int(len(dataset)*0.85)]
-    test = dataset[int(len(dataset)*0.85):]
+    dataset, indices = dataset.shuffle(return_perm=True)
+    split = int(len(dataset)*0.85)
+    train = dataset[:split]
+    test = dataset[split:]
     train = DataLoader(train, batch_size=batch_size, shuffle=True)
     test = DataLoader(test, batch_size=batch_size, shuffle=True)
     return {
         'train': train,
         'test': test,
+        'split': split,
+        'indices': indices,
+        'expl_tst_dt': copy.deepcopy(test),
         'n_features': dataset.num_features,
         'n_classes': dataset.num_classes
     }

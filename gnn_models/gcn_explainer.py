@@ -102,11 +102,11 @@ class GCNPerturb(nn.Module):
 
     def __init__(
             self, n_features, n_hidden, n_classes, edge_index, beta=0.1,
-            cf_expl=True, gamma=0.09, kappa=10, psi_l1=0.001, psi_l2=0.1, device='cuda'
+            cf_expl=True, gamma=0.09, kappa=10, psi_l1=0.1, psi_l2=0.001, device='cuda'
     ):
         # the best gamma and psi for prototype explanation are gamma=0.01, kappa=10, psi=0.09
         # the best gamma and psi for CF explanation are gamma=0.09, kappa=10, psi=0.01
-        # CF -> psi_l1=0.001, psi_l2=0.1 // PT -> psi_l1=0.1, psi_l2=0.01 // EXE -> psi_l1=0.1, psi_l2=0.01
+        # CF -> psi_l1=0.001, psi_l2=0.1 // PT -> psi_l1=0.1, psi_l2=0.001 // EXE -> psi_l1=0.0001, psi_l2=0.01
         super(GCNPerturb, self).__init__()
         self.edge_index = edge_index
         self.beta = beta
@@ -176,10 +176,11 @@ class GCNPerturb(nn.Module):
         return x
 
     def get_explanation(self, x, edge_index, batch):
-        P_vec = (self.P_vec.sigmoid() > 0.5)
-        expl = edge_index[:, P_vec]
-        preds = self.forward_prediction(x, edge_index, batch).argmax(dim=1)
-        return expl, preds
+        P_vec = self.P_vec.sigmoid()
+        expl = edge_index[:, (P_vec > 0.5)]
+        # expl = edge_index[:, P_vec]
+        pred = self.forward_prediction(x, edge_index, batch).argmax(dim=1)
+        return expl, P_vec, pred
 
     def loss(self, x, edge_index, batch, y, l1=1, l2=1, ae=1, dist=1):
         out = self.forward(x, edge_index, batch)
