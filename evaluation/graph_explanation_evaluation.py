@@ -1,6 +1,6 @@
 import gc
 import pandas as pd
-from scipy.spatial.distance import cosine
+from scipy.spatial.distance import euclidean
 from torch_geometric.utils import to_dense_adj, dense_to_sparse
 from evaluation.evaluation_metrics import gen_graph, centrality
 from sklearn.metrics import roc_auc_score
@@ -15,49 +15,78 @@ import torch
 import networkx as nx
 
 
+def evaluation_criteria(expl, adj, dt, g1_cent):
+    expl_adj = to_dense_adj(edge_index=expl, max_num_nodes=dt.x.shape[0]).squeeze(dim=0)
+    g2 = gen_graph(list(range(dt.x.shape[0])), expl.cpu().t().numpy())
+    g2_cent = centrality(g2)
+    s = ((expl_adj < adj).sum()) / (adj.shape[0] ** 2)
+    s = s.item()
+    r = (expl_adj < adj).sum().item()
+    l = torch.linalg.norm(adj, ord=1)
+    l = l.item()
+    p = expl_adj.sum().item()
+    be = euclidean(
+        np.array(list(g1_cent['betweenness'].values())),
+        np.array(list(g2_cent['betweenness'].values()))
+    )
+    cl = euclidean(
+        np.array(list(g1_cent['closeness'].values())),
+        np.array(list(g2_cent['closeness'].values()))
+    )
+    return s, r, l, cl, be, p
+
 def graph_evaluation_metrics(
         dt,
-        ground_dt,
         explanation,
         edge_pred,
         args,
         res_dir,
         dt_id,
+        ground_dt=None,
         gnnexplainer_mask=None,
         pgexplainer_mask=None
 ):
     g1 = gen_graph(list(range(dt.x.shape[0])), dt.edge_index.cpu().t().numpy())
     g1_cent = centrality(g1)
+    adj = to_dense_adj(edge_index=dt.edge_index, max_num_nodes=dt.x.shape[0]).squeeze(dim=0)
+
     res = []
     gnn_acc = pg_acc = None
     if None not in [gnnexplainer_mask, pgexplainer_mask]:
         gnn_acc = roc_auc_score(ground_dt, gnnexplainer_mask)
         pg_acc = roc_auc_score(ground_dt, pgexplainer_mask)
-    adj = to_dense_adj(edge_index=dt.edge_index, max_num_nodes=dt.x.shape[0]).squeeze(dim=0)
+        gnn_expl = dt.edge_index[:,(gnnexplainer_mask>0.5)]
+        gn_s, gn_r, gn_l, gn_be, gn_cl, gn_p = evaluation_criteria(gnn_expl, adj, dt, g1_cent)
+        pg_expl = dt.edge_index[:,(pgexplainer_mask>0.5)]
+        pg_s, pg_r, pg_l, pg_be, pg_cl, pg_p = evaluation_criteria(pg_expl, adj, dt, g1_cent)
+
 
     for j, expl in enumerate(explanation):
         if not expl.shape.__contains__(0):
-            expl_adj = to_dense_adj(edge_index=expl, max_num_nodes=dt.x.shape[0]).squeeze(dim=0)
-            g2 = gen_graph(list(range(dt.x.shape[0])), expl.cpu().t().numpy())
-            g2_cent = centrality(g2)
-            s = ((expl_adj < adj).sum())/(adj.shape[0]*adj.shape[0])
-            s = s.item()
-            r = (expl_adj <adj).sum().item()
-            l = torch.linalg.norm(adj, ord=1)
-            l = l.item()
-            p = expl_adj.sum().item()
-            be = cosine(
-                    np.array(list(g1_cent['betweenness'].values())),
-                    np.array(list(g2_cent['betweenness'].values()))
-                )
-            cl = cosine(
-                    np.array(list(g1_cent['closeness'].values())),
-                    np.array(list(g2_cent['closeness'].values()))
-                )
+            s, r, l, cl, be, p = evaluation_criteria(expl, adj, dt, g1_cent)
+            # expl_adj = to_dense_adj(edge_index=expl, max_num_nodes=dt.x.shape[0]).squeeze(dim=0)
+            # g2 = gen_graph(list(range(dt.x.shape[0])), expl.cpu().t().numpy())
+            # g2_cent = centrality(g2)
+            # s = ((expl_adj < adj).sum())/(adj.shape[0]**2)
+            # s = s.item()
+            # r = (expl_adj <adj).sum().item()
+            # l = torch.linalg.norm(adj, ord=1)
+            # l = l.item()
+            # p = expl_adj.sum().item()
+            # be = cosine(
+            #         np.array(list(g1_cent['betweenness'].values())),
+            #         np.array(list(g2_cent['betweenness'].values()))
+            #     )
+            # cl = cosine(
+            #         np.array(list(g1_cent['closeness'].values())),
+            #         np.array(list(g2_cent['closeness'].values()))
+            #     )
             acc = roc_auc_score(ground_dt, edge_pred[j])
-            res.append([acc, s, r, l, cl, be, p, pg_acc, gnn_acc])
+            res.append([acc, s, r, l, cl, be, p])
             gc.collect()
 
+    res.append([gnn_acc, gn_s, gn_r, gn_l, gn_cl, gn_be, gn_p])
+    res.append([pg_acc, pg_s, pg_r, pg_l, pg_cl, pg_be, pg_p])
     df = pd.DataFrame(
         res,
         columns=[
@@ -67,9 +96,7 @@ def graph_evaluation_metrics(
             'loss_perturb',
             'closeness',
             'betweenness',
-            'present_edges',
-            'pgexplainer',
-            'gnnexplainer'
+            'present_edges'
         ]
     )
     df.to_csv(
@@ -77,51 +104,8 @@ def graph_evaluation_metrics(
     )
     print(
 
-        f'Quantitative evaluation of explanations has finished!\n'
-        f'AUC: {df["accuracy"].max()}, PGExplainer: {pg_acc}, GNNExplainer: {gnn_acc}'
+        f'Quantitative evaluation has finished!\n'
+        f'=> AUC: {df["accuracy"][:-2].max()}, PGExplainer: {pg_acc}, GNNExplainer: {gnn_acc}'
     )
-# def plot_explanation_subgraph(
-#         edge_index, exp_edge_index,
-#         labels,
-#         num_nodes, num_classes,
-#         name='tst.png',
-#
-# ):
-#     colors = ['orange', 'green', 'blue', 'maroon', 'brown', 'darkslategray', 'paleturquoise', 'darksalmon',
-#               'slategray', 'mediumseagreen', 'mediumblue', 'orchid', ]
-#     colors = np.random.permutation(colors)
-#
-#     edge_list = [(i[0], i[1]) for i in edge_index.t().cpu().numpy()]
-#     # only plotting the edges and neighboring nodes of the node_idx
-#     pos_edges = [(u, v) for (u, v) in exp_edge_index.t().cpu().numpy()]
-#     removed_edges = [x for x in edge_list if x not in pos_edges]
-#
-#     label2nodes = []
-#     for i in range(num_classes):
-#         label2nodes.append([])
-#     for i in range(num_nodes):
-#         label2nodes[labels[i]].append(i)
-#
-#     G = nx.Graph()
-#     G.add_nodes_from(list(range(num_nodes)))
-#     G.add_edges_from(edge_list)
-#     pos = nx.spring_layout(G)
-#
-#     plt.close()
-#     for i in range(num_classes):
-#         node_filter = []
-#         for j in range(len(label2nodes[i])):
-#             if label2nodes[i][j] in G.nodes():
-#                 node_filter.append(label2nodes[i][j])
-#         nx.draw_networkx_nodes(G, pos,
-#                                nodelist=node_filter,
-#                                node_color=colors[i % len(colors)],
-#                                node_size=18, label=str(i))
-#
-#     nx.draw_networkx_edges(G, pos, edgelist=pos_edges,
-#                            width=1, alpha=1, edge_color='black')
-#
-#     nx.draw_networkx_edges(G, pos, edgelist=removed_edges,
-#                            width=1, alpha=1, edge_color='red')
-#     plt.savefig(name)
-#     plt.close()
+    return df['accuracy'][:-2].argmax()
+

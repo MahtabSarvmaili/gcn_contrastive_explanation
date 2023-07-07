@@ -4,9 +4,9 @@ import numpy as np
 import torch
 from clustering.main_dmon import DMon
 from visualization import plotClusters
-from model import GCN_dep, train
+from gnn_models.model import GCN_dep, train_graph_classifier
 from data.gengraph import gen_syn1
-from data.data_loader import load_synthetic, load_data
+from data.data_loader import load_synthetic
 
 np.random.seed(0)
 torch.manual_seed(0)
@@ -45,7 +45,7 @@ def main(explainer_args):
     if explainer_args.device=='cuda':
         model = model.cuda()
 
-    train(
+    train_graph_classifier(
         model=model,
         features=data['features'],
         train_adj=data['adj_norm'],

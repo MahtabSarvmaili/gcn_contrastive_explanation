@@ -5,7 +5,7 @@ import torch
 import numpy as np
 from data.data_loader import load_data
 from utils import get_neighbourhood
-from model import GCN_dep, train
+from gnn_models.model import GCN_dep, train_graph_classifier
 from gnnexplainer import GNNExplainer
 from visualization import plot_graph
 from evaluation.evaluation import insertion, deletion
@@ -29,7 +29,7 @@ def main(explainer_args):
     if explainer_args.device=='cuda':
         model = model.cuda()
 
-    train(
+    train_graph_classifier(
         model=model,
         features=data['features'],
         train_adj=data['adj_norm'],

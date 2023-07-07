@@ -1,13 +1,11 @@
 import argparse
-import gc
+import traceback
 import sys
 import os
-import traceback
 import torch
 import numpy as np
-from data.data_loader import load_data, load_graph_data_, load_data_AE
-from utils import normalize_adj, get_neighbourhood, perturb_sub_adjacency
-from model import GCN, train, test
+from data.data_loader import load_graph_data_
+from gnn_models.model import GCNGraph, train_graph_classifier, test_graph_classifier
 from torch.nn.utils import clip_grad_norm_
 
 from gnn_models.gcn_explainer import GCNPerturb
@@ -26,38 +24,35 @@ def main(args):
     torch.cuda.empty_cache()
     data = load_graph_data_(args)
 
-    re_edge_lists, re_graph_labels, re_edge_label_lists, re_node_label_lists = get_graph_data(
+    org_edge_lists, org_graph_labels, org_edge_label_lists, org_node_label_lists = get_graph_data(
         os.getcwd()+'\\data'+f'\\{args.dataset_func}'+f'\\{args.dataset_str}'+f'\\raw', args.dataset_str
     )
     result_dir = os.getcwd()+f'{args.graph_result_dir}'+f'\\{args.dataset_str}'
-    # data_AE = load_data_AE(explainer_args)
-    # data =load_synthetic(gen_syn1, device=explainer_args.device)
-    # data_AE = load_synthetic_AE(gen_syn1, device=explainer_args.device)
-    model = GCN(data['n_features'], args.hidden, data['n_classes'])
+    model = GCNGraph(data['n_features'], args.hidden, data['n_classes'])
     if args.device== 'cuda':
         model = model.cuda()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=5e-4)
-    criterion = torch.nn.CrossEntropyLoss()
+    criterion = torch.nn.CrossEntropyLoss(weight=data['weight'])
     test_acc_prev = 0
     # manually shuffling the data loaders since it doesn't shuffle automatically
     data['train']._DataLoader__initialized=False
     data['test']._DataLoader__initialized=False
     for epoch in range(1, args.epochs):
-        train(model, criterion, optimizer, data['train'])
-        train_acc = test(model, data['train'])
-        test_acc = test(model, data['test'])
+        train_graph_classifier(model, criterion, optimizer, data['train'])
+        train_acc = test_graph_classifier(model, data['train'])
+        test_acc = test_graph_classifier(model, data['test'])
         data['train'].dataset = data['train'].dataset.shuffle()
         data['test'].dataset = data['test'].dataset.shuffle()
         print(f'Epoch: {epoch:03d}, Train Acc: {train_acc:.4f}, Test Acc: {test_acc:.4f}')
-        if test_acc > test_acc_prev:
+        if test_acc > test_acc_prev and epoch > 5:
             test_acc_prev = test_acc
             torch.save(model.state_dict(), result_dir+f"\\{args.dataset_str}_{args.expl_type}_model.pt")
 
-    for dt_id, dt in enumerate(data['expl_tst_dt'].dataset[:50]):
+    for dt_id, dt in enumerate(data['expl_tst_dt'].dataset[:100]):
         expl_preds = []
         explanations = []
         edge_preds = []
-        print(f'Explanation for {dt} has started!')
+        print(f"Explanation for {data['indices'][data['split']+dt_id]} has started!")
         explainer = GCNPerturb(data['n_features'], args.hidden, data['n_classes'], dt.edge_index, dt.x.shape[0])
         explainer_optimizer = torch.optim.Adam(explainer.parameters(), lr=args.cf_lr)
 
@@ -93,34 +88,44 @@ def main(args):
             loss.backward()
             explainer_optimizer.step()
         print(f'Explanation has finished, number of generated explanations: {len(explanations)}')
-        # 3447 - 622
+        # 3447 - 622 - 3517
         pg_mask = pgexplainer(data['train'], model, dt)
         gnn_mask = gnnexplainer(dt, model, None)
-        print('Quantitative evaluation of explanations has started!')
+        if org_edge_label_lists is not None:
+            actual_dt = np.int32(np.array(org_edge_label_lists[data['indices'][data['split'] + dt_id]]) > 0)
+        else:
+            actual_dt = None
+        print(f'Quantitative evaluation:')
         try:
-            graph_evaluation_metrics(
+            expl_plot_idx = graph_evaluation_metrics(
                 dt,
-                np.array(re_edge_label_lists[data['indices'][data['split']+dt_id]]),
                 explanations,
                 edge_preds,
                 args,
                 result_dir,
                 data['indices'][data['split']+dt_id],
+                actual_dt,
                 gnn_mask,
                 pg_mask
             )
             labels = dt.x.argmax(dim=1).cpu().numpy()
             list_classes = list(range(dt.x.shape[1]))
-            # viz_exp = PlotGraphExplanation(
-            #     dt.edge_index, labels, dt.x.shape[0], list_classes, args.expl_type, args.dataset_str
-            # )
-            # if args.expl_type == 'CF':
-            #     viz_exp.plot_cf(explanations, result_dir, dt_id)
-            # else:
-            #     # viz_exp.plot_pt(explanations, result_dir, dt_id)
+            expl_plot = PlotGraphExplanation(
+                dt.edge_index, labels, dt.x.shape[0], list_classes, args.expl_type, args.dataset_str
+            )
+            if args.expl_type == 'CF':
+                expl_plot.plot_cf(
+                    [explanations[expl_plot_idx]], result_dir, data['indices'][data['split']+dt_id]
+                )
+            else:
+                expl_plot.plot_pt(
+                    [explanations[expl_plot_idx]], result_dir, data['indices'][data['split']+dt_id]
+                )
         except:
             print(f"Error for {data['indices'][data['split']+dt_id]} data sample")
+            print(traceback.format_exc())
             continue
+
 
 if __name__ == '__main__':
 
@@ -128,7 +133,7 @@ if __name__ == '__main__':
     parser.add_argument('--device', type=str, default='cuda', help='torch device.')
     parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train the ')
     parser.add_argument('--expl_epochs', type=int, default=200, help='Number of epochs to train the ')
-    parser.add_argument('--expl_type', type=str, default='PT', help='Type of explanation.')
+    parser.add_argument('--expl_type', type=str, default='CF', help='Type of explanation.')
     parser.add_argument('--hidden', type=int, default=100, help='Number of units in hidden layer 1.')
     parser.add_argument('--lr', type=float, default=0.009, help='Initial learning rate.')
     parser.add_argument('--cf_lr', type=float, default=0.01, help='CF-explainer learning rate.')
