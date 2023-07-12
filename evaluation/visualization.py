@@ -38,7 +38,7 @@ class PlotGraphExplanation:
         self.colors = ["#" + ''.join([random.choice('0123456789ABCDEF') for i in range(6)])
                        for j in range(len(self.list_classes))]
 
-    def plot_cf(self, explanations, res_dir, dt_id):
+    def plot_del_edges(self, explanations, res_dir, dt_id):
 
         for j, exp_edge_index in enumerate(explanations):
             pos_edges = [(u, v) for (u, v) in exp_edge_index.t().cpu().numpy()]
@@ -65,7 +65,7 @@ class PlotGraphExplanation:
             )
             plt.close()
 
-    def plot_pt(self, explanations, res_dir, dt_id):
+    def plot_pr_edges(self, explanations, res_dir, dt_id):
 
         for j, exp_edge_index in enumerate(explanations):
             pos_edges = [(u, v) for (u, v) in exp_edge_index.t().cpu().numpy()]

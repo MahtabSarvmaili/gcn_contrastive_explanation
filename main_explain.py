@@ -27,7 +27,7 @@ def main(args):
     org_edge_lists, org_graph_labels, org_edge_label_lists, org_node_label_lists = get_graph_data(
         os.getcwd()+'\\data'+f'\\{args.dataset_func}'+f'\\{args.dataset_str}'+f'\\raw', args.dataset_str
     )
-    result_dir = os.getcwd()+f'{args.graph_result_dir}'+f'\\{args.dataset_str}'
+    result_dir = os.getcwd()+f'{args.graph_result_dir}'+f'\\{args.dataset_str}'+f'\\{args.expl_type}'
     model = GCNGraph(data['n_features'], args.hidden, data['n_classes'])
     if args.device== 'cuda':
         model = model.cuda()
@@ -35,14 +35,17 @@ def main(args):
     criterion = torch.nn.CrossEntropyLoss(weight=data['weight'])
     test_acc_prev = 0
     # manually shuffling the data loaders since it doesn't shuffle automatically
-    data['train']._DataLoader__initialized=False
-    data['test']._DataLoader__initialized=False
+    if args.dataset_func == 'TUDataset':
+        data['train']._DataLoader__initialized=False
+        data['test']._DataLoader__initialized=False
+
     for epoch in range(1, args.epochs):
         train_graph_classifier(model, criterion, optimizer, data['train'])
         train_acc = test_graph_classifier(model, data['train'])
         test_acc = test_graph_classifier(model, data['test'])
-        data['train'].dataset = data['train'].dataset.shuffle()
-        data['test'].dataset = data['test'].dataset.shuffle()
+        if args.dataset_func == 'TUDataset':
+            data['train'].dataset = data['train'].dataset.shuffle()
+            data['test'].dataset = data['test'].dataset.shuffle()
         print(f'Epoch: {epoch:03d}, Train Acc: {train_acc:.4f}, Test Acc: {test_acc:.4f}')
         if test_acc > test_acc_prev and epoch > 5:
             test_acc_prev = test_acc
@@ -53,7 +56,7 @@ def main(args):
         explanations = []
         edge_preds = []
         print(f"Explanation for {data['indices'][data['split']+dt_id]} has started!")
-        explainer = GCNPerturb(data['n_features'], args.hidden, data['n_classes'], dt.edge_index, dt.x.shape[0])
+        explainer = GCNPerturb(data['n_features'], args.hidden, data['n_classes'], dt.edge_index, args.expl_type)
         explainer_optimizer = torch.optim.Adam(explainer.parameters(), lr=args.cf_lr)
 
         explainer.load_state_dict(
@@ -89,6 +92,7 @@ def main(args):
             explainer_optimizer.step()
         print(f'Explanation has finished, number of generated explanations: {len(explanations)}')
         # 3447 - 622 - 3517
+
         pg_mask = pgexplainer(data['train'], model, dt)
         gnn_mask = gnnexplainer(dt, model, None)
         if org_edge_label_lists is not None:
@@ -106,20 +110,26 @@ def main(args):
                 data['indices'][data['split']+dt_id],
                 actual_dt,
                 gnn_mask,
-                pg_mask
+                pg_mask,
             )
-            labels = dt.x.argmax(dim=1).cpu().numpy()
-            list_classes = list(range(dt.x.shape[1]))
+            if args.dataset_func =='TUDataset':
+                labels = dt.x.argmax(dim=1).cpu().numpy()
+                list_classes = list(range(dt.x.shape[1]))
+            if args.dataset_func =='MoleculeNet':
+                labels = dt.x[:, 0].cpu().numpy()
+                list_classes = dt.x[:, 0].unique().cpu().numpy()
+
             expl_plot = PlotGraphExplanation(
                 dt.edge_index, labels, dt.x.shape[0], list_classes, args.expl_type, args.dataset_str
             )
-            if args.expl_type == 'CF':
-                expl_plot.plot_cf(
-                    [explanations[expl_plot_idx]], result_dir, data['indices'][data['split']+dt_id]
+            if args.expl_type == 'PT':
+                expl_plot.plot_pr_edges(
+                    explanations, result_dir, data['indices'][data['split']+dt_id]
                 )
+
             else:
-                expl_plot.plot_pt(
-                    [explanations[expl_plot_idx]], result_dir, data['indices'][data['split']+dt_id]
+                expl_plot.plot_del_edges(
+                    explanations, result_dir, data['indices'][data['split']+dt_id]
                 )
         except:
             print(f"Error for {data['indices'][data['split']+dt_id]} data sample")
@@ -133,14 +143,14 @@ if __name__ == '__main__':
     parser.add_argument('--device', type=str, default='cuda', help='torch device.')
     parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train the ')
     parser.add_argument('--expl_epochs', type=int, default=200, help='Number of epochs to train the ')
-    parser.add_argument('--expl_type', type=str, default='CF', help='Type of explanation.')
+    parser.add_argument('--expl_type', type=str, default='EXE', help='Type of explanation.')
     parser.add_argument('--hidden', type=int, default=100, help='Number of units in hidden layer 1.')
     parser.add_argument('--lr', type=float, default=0.009, help='Initial learning rate.')
     parser.add_argument('--cf_lr', type=float, default=0.01, help='CF-explainer learning rate.')
     parser.add_argument('--dropout', type=float, default=0.2, help='Dropout rate (1 - keep probability).')
     parser.add_argument('--cf_optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset_str', type=str, default='Mutagenicity', help='type of dataset.')
-    parser.add_argument('--dataset_func', type=str, default='TUDataset', help='type of dataset.')
+    parser.add_argument('--dataset_str', type=str, default='BBBP', help='type of dataset.')
+    parser.add_argument('--dataset_func', type=str, default='MoleculeNet', help='type of dataset.')
     parser.add_argument('--beta', type=float, default=0.1, help='beta variable')
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
     parser.add_argument('--graph_result_dir', type=str, default='\\results', help='Result directory')
@@ -150,4 +160,6 @@ if __name__ == '__main__':
 
     if os.listdir(os.getcwd()+f'{args.graph_result_dir}').__contains__(args.dataset_str) is False:
         os.mkdir(os.getcwd()+f'{args.graph_result_dir}'+f'\\{args.dataset_str}', )
+    if os.listdir(os.getcwd()+f'{args.graph_result_dir}'f'\\{args.dataset_str}').__contains__(args.expl_type) is False:
+        os.mkdir(os.getcwd()+f'{args.graph_result_dir}'+f'\\{args.dataset_str}'+f'\\{args.expl_type}')
     main(args)

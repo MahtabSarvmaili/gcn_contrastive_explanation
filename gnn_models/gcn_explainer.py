@@ -101,23 +101,18 @@ class GCNPerturb(nn.Module):
     """
 
     def __init__(
-            self, n_features, n_hidden, n_classes, edge_index, beta=0.1,
-            cf_expl=True, gamma=0.09, kappa=10, psi_l1=0.001, psi_l2=0.1, device='cuda'
+            self, n_features, n_hidden, n_classes, edge_index, expl_type=None, kappa=10, device='cuda'
     ):
-        # the best gamma and psi for prototype explanation are gamma=0.01, kappa=10, psi=0.09
-        # the best gamma and psi for CF explanation are gamma=0.09, kappa=10, psi=0.01
         # CF -> psi_l1=0.001, psi_l2=0.1 // PT -> psi_l1=0.1, psi_l2=0.001 // EXE -> psi_l1=0.0001, psi_l2=0.01
         super(GCNPerturb, self).__init__()
         self.edge_index = edge_index
-        self.beta = beta
         self.device = device
         self.kappa = torch.tensor(kappa).cuda()
-        self.beta = torch.tensor(beta).cuda()
         self.const = torch.tensor(0.0, device=device)
-        self.gamma = torch.tensor(gamma, device=device)
+        self.l1_l2_psi = {'CF':[0.001,0.01], 'PT':[0.1,0.001], 'EXE':[0.0001,0.01]}
+        psi_l1, psi_l2 = self.l1_l2_psi[expl_type]
         self.psi_l1 = torch.tensor(psi_l1, device=device)
         self.psi_l2 = torch.tensor(psi_l2, device=device)
-        self.cf_expl = cf_expl
 
         self.conv1 = GraphConvolutionPerturb(
             n_features, n_hidden, edge_index_size=edge_index.size(1)
