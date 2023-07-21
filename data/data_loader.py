@@ -160,6 +160,8 @@ def load_synthetic_node_data(args):
 
 # loading data for graph classification
 def load_graph_data_(args, batch_size=64):
+    torch.manual_seed(0)
+    np.random.seed(0)
     function = globals()[args.dataset_func]
     path = osp.join(osp.dirname(osp.realpath(__file__)), args.dataset_func).replace("\\", "/")
     transformer = T.Compose([

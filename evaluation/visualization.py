@@ -10,18 +10,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
 
-# colors = ['orange', 'green', 'blue', 'yellow', 'maroon', 'saddlebrown',
-#           'darkslategray', 'paleturquoise', 'deeppink',
-#           'slategray', 'mediumseagreen', 'mediumblue', 'orchid', 'deepskyblue']
-# colors = np.random.permutation(colors)
-
 
 class PlotGraphExplanation:
     def __init__(self, edge_index, labels, num_nodes, list_classes, exp_type, dataset_str):
+        np.random.seed(0)
         self.list_classes = list_classes
         self.num_nodes = num_nodes
         self.expl_type = exp_type
         self.dataset = dataset_str
+        self.title = {'CF': "Counterfactual Explanation", 'PT': 'Prototype Explanation', 'EXE': 'Exemplar Explanation'}
         self.edge_list = [(i[0], i[1]) for i in edge_index.t().cpu().numpy()]
 
         self.G = nx.Graph()
@@ -38,7 +35,7 @@ class PlotGraphExplanation:
         self.colors = ["#" + ''.join([random.choice('0123456789ABCDEF') for i in range(6)])
                        for j in range(len(self.list_classes))]
 
-    def plot_del_edges(self, explanations, res_dir, dt_id):
+    def plot_del_edges(self, explanations, res_dir, dt_id, plt_title=None):
 
         for j, exp_edge_index in enumerate(explanations):
             pos_edges = [(u, v) for (u, v) in exp_edge_index.t().cpu().numpy()]
@@ -60,12 +57,16 @@ class PlotGraphExplanation:
             nx.draw_networkx_edges(self.G, self.pos, edgelist=removed_edges,
                                    width=1, alpha=1, edge_color='red')
             plt.legend()
+            if plt_title is not None:
+                plt.title(plt_title)
+            else:
+                plt.title(self.title[self.expl_type])
             plt.savefig(
                 res_dir + f'\\{self.dataset}_{self.expl_type}_{dt_id}_{j}_{exp_edge_index.cpu().numpy().shape}.png'
             )
             plt.close()
 
-    def plot_pr_edges(self, explanations, res_dir, dt_id):
+    def plot_pr_edges(self, explanations, res_dir, dt_id, f_name=None, plt_title=None):
 
         for j, exp_edge_index in enumerate(explanations):
             pos_edges = [(u, v) for (u, v) in exp_edge_index.t().cpu().numpy()]
@@ -84,9 +85,18 @@ class PlotGraphExplanation:
                                    width=1, alpha=1, edge_color='grey', style=':')
             nx.draw_networkx_edges(self.G, self.pos, edgelist=pos_edges,
                                    width=1, alpha=1, edge_color='green')
-
             plt.legend()
-            plt.savefig(
-                res_dir + f'\\{self.dataset}_{self.expl_type}_{dt_id}_{j}_{exp_edge_index.cpu().numpy().shape}.png'
-            )
+            if plt_title is not None:
+                plt.title(plt_title)
+            else:
+                plt.title(self.title[self.expl_type])
+
+            if f_name is None:
+                plt.savefig(
+                    res_dir + f'\\{self.dataset}_{self.expl_type}_{dt_id}_{j}_{exp_edge_index.cpu().numpy().shape}.png'
+                )
+            else:
+                plt.savefig(
+                    res_dir + f'\\{self.dataset}_{self.expl_type}_{dt_id}_{f_name}.png'
+                )
             plt.close()

@@ -31,7 +31,7 @@ def main(args):
     model = GCNGraph(data['n_features'], args.hidden, data['n_classes'])
     if args.device== 'cuda':
         model = model.cuda()
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=5e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=5e-5)
     criterion = torch.nn.CrossEntropyLoss(weight=data['weight'])
     test_acc_prev = 0
     # manually shuffling the data loaders since it doesn't shuffle automatically
@@ -51,7 +51,7 @@ def main(args):
             test_acc_prev = test_acc
             torch.save(model.state_dict(), result_dir+f"\\{args.dataset_str}_{args.expl_type}_model.pt")
 
-    for dt_id, dt in enumerate(data['expl_tst_dt'].dataset[:100]):
+    for dt_id, dt in enumerate(data['expl_tst_dt'].dataset[:200]):
         expl_preds = []
         explanations = []
         edge_preds = []
@@ -95,8 +95,11 @@ def main(args):
 
         pg_mask = pgexplainer(data['train'], model, dt)
         gnn_mask = gnnexplainer(dt, model, None)
+        actual_expls = None
         if org_edge_label_lists is not None:
             actual_dt = np.int32(np.array(org_edge_label_lists[data['indices'][data['split'] + dt_id]]) > 0)
+            actual_idxs = np.array(org_edge_label_lists[data['indices'][data['split'] + dt_id]]) > 0
+            actual_expls = [dt.edge_index[:, actual_idxs]]
         else:
             actual_dt = None
         print(f'Quantitative evaluation:')
@@ -122,6 +125,15 @@ def main(args):
             expl_plot = PlotGraphExplanation(
                 dt.edge_index, labels, dt.x.shape[0], list_classes, args.expl_type, args.dataset_str
             )
+            # plotting the ground truth explanation
+            if actual_expls is not None:
+                expl_plot.plot_pr_edges(
+                    actual_expls,
+                    result_dir,
+                    data['indices'][data['split'] + dt_id],
+                    'actual_expl',
+                    'Actual Explanation'
+                )
             if args.expl_type == 'PT':
                 expl_plot.plot_pr_edges(
                     explanations, result_dir, data['indices'][data['split']+dt_id]
@@ -131,6 +143,7 @@ def main(args):
                 expl_plot.plot_del_edges(
                     explanations, result_dir, data['indices'][data['split']+dt_id]
                 )
+
         except:
             print(f"Error for {data['indices'][data['split']+dt_id]} data sample")
             print(traceback.format_exc())
@@ -143,14 +156,14 @@ if __name__ == '__main__':
     parser.add_argument('--device', type=str, default='cuda', help='torch device.')
     parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train the ')
     parser.add_argument('--expl_epochs', type=int, default=200, help='Number of epochs to train the ')
-    parser.add_argument('--expl_type', type=str, default='EXE', help='Type of explanation.')
+    parser.add_argument('--expl_type', type=str, default='CF', help='Type of explanation.')
     parser.add_argument('--hidden', type=int, default=100, help='Number of units in hidden layer 1.')
     parser.add_argument('--lr', type=float, default=0.009, help='Initial learning rate.')
     parser.add_argument('--cf_lr', type=float, default=0.01, help='CF-explainer learning rate.')
     parser.add_argument('--dropout', type=float, default=0.2, help='Dropout rate (1 - keep probability).')
     parser.add_argument('--cf_optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset_str', type=str, default='BBBP', help='type of dataset.')
-    parser.add_argument('--dataset_func', type=str, default='MoleculeNet', help='type of dataset.')
+    parser.add_argument('--dataset_str', type=str, default='AIDS', help='type of dataset.')
+    parser.add_argument('--dataset_func', type=str, default='TUDataset', help='type of dataset.')
     parser.add_argument('--beta', type=float, default=0.1, help='beta variable')
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
     parser.add_argument('--graph_result_dir', type=str, default='\\results', help='Result directory')
