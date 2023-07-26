@@ -109,7 +109,7 @@ class GCNPerturb(nn.Module):
         self.device = device
         self.kappa = torch.tensor(kappa).cuda()
         self.const = torch.tensor(0.0, device=device)
-        self.l1_l2_psi = {'CF':[0.001,0.01], 'PT':[0.1,0.001], 'EXE':[0.0001,0.01]}
+        self.l1_l2_psi = {'CF':[0.001,0.01], 'PT': [0.1, 0.001], 'EXE':[0.0001,0.01]}
         psi_l1, psi_l2 = self.l1_l2_psi[expl_type]
         self.psi_l1 = torch.tensor(psi_l1, device=device)
         self.psi_l2 = torch.tensor(psi_l2, device=device)

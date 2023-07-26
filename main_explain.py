@@ -2,18 +2,20 @@ import argparse
 import traceback
 import sys
 import os
+import platform
 import torch
 import numpy as np
 from data.data_loader import load_graph_data_
 from gnn_models.model import GCNGraph, train_graph_classifier, test_graph_classifier
 from torch.nn.utils import clip_grad_norm_
 
+
 from gnn_models.gcn_explainer import GCNPerturb
 from evaluation.graph_explanation_evaluation import graph_evaluation_metrics
 from evaluation.visualization import PlotGraphExplanation
 from data.graph_utils import get_graph_data
 from baselines.graph_baseline_explainer import gnnexplainer, pgexplainer
-
+from utils import transform_address
 # torch.manual_seed(0)
 # np.random.seed(0)
 
@@ -25,9 +27,12 @@ def main(args):
     data = load_graph_data_(args)
 
     org_edge_lists, org_graph_labels, org_edge_label_lists, org_node_label_lists = get_graph_data(
-        os.getcwd()+'\\data'+f'\\{args.dataset_func}'+f'\\{args.dataset_str}'+f'\\raw', args.dataset_str
+        transform_address(os.getcwd()+'\\data'+f'\\{args.dataset_func}'+f'\\{args.dataset_str}'+f'\\raw'),
+        args.dataset_str
     )
-    result_dir = os.getcwd()+f'{args.graph_result_dir}'+f'\\{args.dataset_str}'+f'\\{args.expl_type}'
+    result_dir = transform_address(
+        os.getcwd()+f'{args.graph_result_dir}'+f'\\{args.dataset_str}'+f'\\{args.expl_type}'
+    )
     model = GCNGraph(data['n_features'], args.hidden, data['n_classes'])
     if args.device== 'cuda':
         model = model.cuda()
@@ -49,7 +54,10 @@ def main(args):
         print(f'Epoch: {epoch:03d}, Train Acc: {train_acc:.4f}, Test Acc: {test_acc:.4f}')
         if test_acc > test_acc_prev and epoch > 5:
             test_acc_prev = test_acc
-            torch.save(model.state_dict(), result_dir+f"\\{args.dataset_str}_{args.expl_type}_model.pt")
+            torch.save(
+                model.state_dict(),
+                transform_address(result_dir+f"\\{args.dataset_str}_{args.expl_type}_model.pt")
+            )
 
     for dt_id, dt in enumerate(data['expl_tst_dt'].dataset[:200]):
         expl_preds = []
@@ -60,7 +68,7 @@ def main(args):
         explainer_optimizer = torch.optim.Adam(explainer.parameters(), lr=args.cf_lr)
 
         explainer.load_state_dict(
-            torch.load(result_dir+f"\\{args.dataset_str}_{args.expl_type}_model.pt"),
+            torch.load(transform_address(result_dir+f"\\{args.dataset_str}_{args.expl_type}_model.pt")),
             strict=False
         )
         explainer.to(args.device)
@@ -156,7 +164,7 @@ if __name__ == '__main__':
     parser.add_argument('--device', type=str, default='cuda', help='torch device.')
     parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train the ')
     parser.add_argument('--expl_epochs', type=int, default=200, help='Number of epochs to train the ')
-    parser.add_argument('--expl_type', type=str, default='CF', help='Type of explanation.')
+    parser.add_argument('--expl_type', type=str, default='PT', help='Type of explanation.')
     parser.add_argument('--hidden', type=int, default=100, help='Number of units in hidden layer 1.')
     parser.add_argument('--lr', type=float, default=0.009, help='Initial learning rate.')
     parser.add_argument('--cf_lr', type=float, default=0.01, help='CF-explainer learning rate.')
@@ -171,8 +179,16 @@ if __name__ == '__main__':
     parser.add_argument('--n_momentum', type=float, default=0.5, help='Nesterov momentum')
     args = parser.parse_args()
 
-    if os.listdir(os.getcwd()+f'{args.graph_result_dir}').__contains__(args.dataset_str) is False:
-        os.mkdir(os.getcwd()+f'{args.graph_result_dir}'+f'\\{args.dataset_str}', )
-    if os.listdir(os.getcwd()+f'{args.graph_result_dir}'f'\\{args.dataset_str}').__contains__(args.expl_type) is False:
-        os.mkdir(os.getcwd()+f'{args.graph_result_dir}'+f'\\{args.dataset_str}'+f'\\{args.expl_type}')
+    if os.listdir(
+            transform_address(os.getcwd()+f'{args.graph_result_dir}')
+    ).__contains__(args.dataset_str) is False:
+        os.mkdir(
+            transform_address(os.getcwd()+f'{args.graph_result_dir}'+f'\\{args.dataset_str}')
+        )
+    if os.listdir(
+            transform_address(os.getcwd()+f'{args.graph_result_dir}'f'\\{args.dataset_str}')
+    ).__contains__(args.expl_type) is False:
+        os.mkdir(
+            transform_address(os.getcwd()+f'{args.graph_result_dir}'+f'\\{args.dataset_str}'+f'\\{args.expl_type}')
+        )
     main(args)

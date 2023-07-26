@@ -1,14 +1,11 @@
-import gc
-import pandas as pd
-from scipy.spatial.distance import cosine
-from torch_geometric.utils import to_dense_adj, dense_to_sparse
-
-import os, sys, random
-sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
-from torch_geometric.utils import dense_to_sparse
+import os
+import sys
+import random
 import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
+from utils import transform_address
+sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
 
 
 class PlotGraphExplanation:
@@ -18,7 +15,11 @@ class PlotGraphExplanation:
         self.num_nodes = num_nodes
         self.expl_type = exp_type
         self.dataset = dataset_str
-        self.title = {'CF': "Counterfactual Explanation", 'PT': 'Prototype Explanation', 'EXE': 'Exemplar Explanation'}
+        self.title = {
+            'CF': "Counterfactual Explanation",
+            'PT': 'Prototype Explanation',
+            'EXE': 'Exemplar Explanation'
+        }
         self.edge_list = [(i[0], i[1]) for i in edge_index.t().cpu().numpy()]
 
         self.G = nx.Graph()
@@ -62,7 +63,10 @@ class PlotGraphExplanation:
             else:
                 plt.title(self.title[self.expl_type])
             plt.savefig(
-                res_dir + f'\\{self.dataset}_{self.expl_type}_{dt_id}_{j}_{exp_edge_index.cpu().numpy().shape}.png'
+                transform_address(
+                    res_dir +
+                    f'\\{self.dataset}_{self.expl_type}_{dt_id}_{j}_{exp_edge_index.cpu().numpy().shape}.png'
+                )
             )
             plt.close()
 
@@ -93,10 +97,15 @@ class PlotGraphExplanation:
 
             if f_name is None:
                 plt.savefig(
-                    res_dir + f'\\{self.dataset}_{self.expl_type}_{dt_id}_{j}_{exp_edge_index.cpu().numpy().shape}.png'
+                    transform_address(
+                        res_dir +
+                        f'\\{self.dataset}_{self.expl_type}_{dt_id}_{j}_{exp_edge_index.cpu().numpy().shape}.png'
+                    )
                 )
             else:
                 plt.savefig(
-                    res_dir + f'\\{self.dataset}_{self.expl_type}_{dt_id}_{f_name}.png'
+                    transform_address(
+                        res_dir +
+                        f'\\{self.dataset}_{self.expl_type}_{dt_id}_{f_name}.png')
                 )
             plt.close()

@@ -1,18 +1,15 @@
 import gc
+import os
+import sys
 import pandas as pd
+import numpy as np
+import torch
 from scipy.spatial.distance import euclidean
 from torch_geometric.utils import to_dense_adj, dense_to_sparse
 from evaluation.evaluation_metrics import gen_graph, centrality
 from sklearn.metrics import roc_auc_score
-
-import os, sys
-
+from utils import transform_address
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
-from torch_geometric.utils import dense_to_sparse
-import numpy as np
-import matplotlib.pyplot as plt
-import torch
-import networkx as nx
 
 
 def evaluation_criteria(expl, adj, dt, g1_cent):
@@ -63,7 +60,6 @@ def graph_evaluation_metrics(
         pg_expl = dt.edge_index[:,(pgexplainer_mask>0.5)]
         pg_s, pg_r, pg_l, pg_be, pg_cl, pg_p = evaluation_criteria(pg_expl, adj, dt, g1_cent)
 
-
     for j, expl in enumerate(explanation):
         if not expl.shape.__contains__(0):
             s, r, l, cl, be, p = evaluation_criteria(expl, adj, dt, g1_cent)
@@ -90,14 +86,17 @@ def graph_evaluation_metrics(
         ]
     )
     df.to_csv(
-        res_dir + f'\\{args.dataset_str}_{args.expl_type}_{dt_id}_{len(explanation)}.csv', index=False
+        transform_address(
+            res_dir + f'\\{args.dataset_str}_{args.expl_type}_{dt_id}_{len(explanation)}.csv'
+        ),
+        index=False
     )
     print(
 
         f'Quantitative evaluation has finished!\n'
         f'=> AUC: {df["accuracy"][:-2].max()}, PGExplainer: {pg_acc}, GNNExplainer: {gnn_acc}'
     )
-    if args.expl_type =='CF':
+    if args.expl_type == 'CF':
         return df['sparsity'][:-2].argmin()
     else:
         return df['accuracy'][:-2].argmax()

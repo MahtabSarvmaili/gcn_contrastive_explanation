@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from utils import transform_address
 import sys
 
 
@@ -13,7 +14,7 @@ def check_dir(dataset_dir):
 def get_graph_data(dataset_dir, dataset_name):
     if check_dir(dataset_dir) is False:
         return None, None, None, None
-    pri = dataset_dir + f'\\{dataset_name}_'
+    pri = transform_address(dataset_dir + f'\\{dataset_name}_')
     file_edges = pri+'A.txt'
     file_edge_labels = pri+'edge_labels.txt'
     file_graph_indicator = pri+'graph_indicator.txt'

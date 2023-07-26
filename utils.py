@@ -182,3 +182,11 @@ def perturb_sub_adjacency(num_nodes, sub_adj, threshold):
         psub_adj_list.append(psub_adj)
     return psub_adj_list
 
+
+def transform_address(address:str)->str:
+    import platform
+    system = platform.system()
+    new_address = address.replace('\\', '/')
+    if system.lower().__contains__('windows'):
+        new_address = address.replace('/', '\\')
+    return new_address
