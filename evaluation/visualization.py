@@ -6,7 +6,8 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from utils import transform_address
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
-
+np.random.seed(0)
+random.seed(0)
 
 class PlotGraphExplanation:
     def __init__(self, edge_index, labels, num_nodes, list_classes, exp_type, dataset_str):
@@ -50,13 +51,13 @@ class PlotGraphExplanation:
                 nx.draw_networkx_nodes(self.G, self.pos,
                                        nodelist=node_filter,
                                        node_color=self.colors[hh % len(self.colors)],
-                                       node_size=30, label=str(hh))
+                                       node_size=50, label=str(hh))
 
             nx.draw_networkx_edges(self.G, self.pos, edgelist=pos_edges,
-                                   width=1, alpha=1, edge_color='black')
+                                   width=2, alpha=1, edge_color='black')
 
             nx.draw_networkx_edges(self.G, self.pos, edgelist=removed_edges,
-                                   width=1, alpha=1, edge_color='red')
+                                   width=2, alpha=1, edge_color='red')
             plt.legend()
             if plt_title is not None:
                 plt.title(plt_title)
@@ -83,12 +84,12 @@ class PlotGraphExplanation:
                 nx.draw_networkx_nodes(self.G, self.pos,
                                        nodelist=node_filter,
                                        node_color=self.colors[hh % len(self.colors)],
-                                       node_size=30, label=str(hh))
+                                       node_size=50, label=str(hh))
 
             nx.draw_networkx_edges(self.G, self.pos,
-                                   width=1, alpha=1, edge_color='grey', style=':')
+                                   width=2, alpha=1, edge_color='grey', style=':')
             nx.draw_networkx_edges(self.G, self.pos, edgelist=pos_edges,
-                                   width=1, alpha=1, edge_color='green')
+                                   width=2, alpha=1, edge_color='green')
             plt.legend()
             if plt_title is not None:
                 plt.title(plt_title)
