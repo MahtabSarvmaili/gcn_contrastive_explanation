@@ -2,7 +2,7 @@ import os
 import pandas as pd
 from utils import transform_address
 # dirs = ['AIDS', 'MUTAG', 'Mutagenicity', 'COX2_MD']
-dirs = ['Mutagenicity']
+dirs = ['MUTAG']
 expls = ['PT']
 
 for fols in dirs:

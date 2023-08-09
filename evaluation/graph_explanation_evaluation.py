@@ -32,6 +32,7 @@ def evaluation_criteria(expl, adj, dt, g1_cent):
     )
     return s, r, l, cl, be, p
 
+
 def graph_evaluation_metrics(
         dt,
         explanation,
@@ -42,6 +43,7 @@ def graph_evaluation_metrics(
         ground_dt=None,
         gnnexplainer_mask=None,
         pgexplainer_mask=None,
+        expl_vis_func=None
 ):
     g1 = gen_graph(list(range(dt.x.shape[0])), dt.edge_index.cpu().t().numpy())
     g1_cent = centrality(g1)
@@ -62,6 +64,7 @@ def graph_evaluation_metrics(
 
     for j, expl in enumerate(explanation):
         if not expl.shape.__contains__(0):
+            expl_vis_func(expl, res_dir, dt_id.item(), j)
             s, r, l, cl, be, p = evaluation_criteria(expl, adj, dt, g1_cent)
             if ground_dt is None:
                 acc=0
@@ -96,8 +99,8 @@ def graph_evaluation_metrics(
         f'Quantitative evaluation has finished!\n'
         f'=> AUC: {df["accuracy"][:-2].max()}, PGExplainer: {pg_acc}, GNNExplainer: {gnn_acc}'
     )
-    if args.expl_type == 'CF':
-        return df['sparsity'][:-2].argmin()
-    else:
-        return df['accuracy'][:-2].argmax()
+    # if args.expl_type == 'CF':
+    #     return df['sparsity'][:-2].argmin()
+    # else:
+    #     return df['accuracy'][:-2].argmax()
 

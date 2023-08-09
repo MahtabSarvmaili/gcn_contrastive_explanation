@@ -37,76 +37,69 @@ class PlotGraphExplanation:
         self.colors = ["#" + ''.join([random.choice('0123456789ABCDEF') for i in range(6)])
                        for j in range(len(self.list_classes))]
 
-    def plot_del_edges(self, explanations, res_dir, dt_id, plt_title=None):
+    def plot_del_edges(self, exp_edge_index, res_dir, dt_id, expl_idx=None, plt_title=None):
 
-        for j, exp_edge_index in enumerate(explanations):
-            pos_edges = [(u, v) for (u, v) in exp_edge_index.t().cpu().numpy()]
-            removed_edges = [x for x in self.edge_list if x not in pos_edges]
-            plt.close()
-            for hh in self.list_classes:
-                node_filter = []
-                for zz in self.label2nodes[hh]:
-                    if zz in self.G.nodes():
-                        node_filter.append(zz)
-                nx.draw_networkx_nodes(self.G, self.pos,
-                                       nodelist=node_filter,
-                                       node_color=self.colors[hh % len(self.colors)],
-                                       node_size=50, label=str(hh))
+        pos_edges = [(u, v) for (u, v) in exp_edge_index.t().cpu().numpy()]
+        removed_edges = [x for x in self.edge_list if x not in pos_edges]
+        plt.close()
+        plt.figure(figsize=(4, 2.5))
+        for hh in self.list_classes:
+            node_filter = []
+            for zz in self.label2nodes[hh]:
+                if zz in self.G.nodes():
+                    node_filter.append(zz)
+            nx.draw_networkx_nodes(self.G, self.pos,
+                                   nodelist=node_filter,
+                                   node_color=self.colors[hh % len(self.colors)],
+                                   node_size=50, label=str(hh))
 
-            nx.draw_networkx_edges(self.G, self.pos, edgelist=pos_edges,
-                                   width=2, alpha=1, edge_color='black')
+        nx.draw_networkx_edges(self.G, self.pos, edgelist=pos_edges,
+                               width=2, alpha=1, edge_color='black')
 
-            nx.draw_networkx_edges(self.G, self.pos, edgelist=removed_edges,
-                                   width=2, alpha=1, edge_color='red')
-            plt.legend()
-            if plt_title is not None:
-                plt.title(plt_title)
-            else:
-                plt.title(self.title[self.expl_type])
+        nx.draw_networkx_edges(self.G, self.pos, edgelist=removed_edges,
+                               width=2, alpha=1, edge_color='red')
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(
+            transform_address(
+                res_dir +
+                f'\\{self.dataset}_{self.expl_type}_{dt_id}_{expl_idx}_{exp_edge_index.cpu().numpy().shape}.png'
+            )
+        )
+        plt.close()
+
+    def plot_pr_edges(self, exp_edge_index, res_dir, dt_id, expl_idx=None, f_name=None, plt_title=None):
+
+        pos_edges = [(u, v) for (u, v) in exp_edge_index.t().cpu().numpy()]
+        plt.close()
+        plt.figure(figsize=(4, 2.5))
+        for hh in self.list_classes:
+            node_filter = []
+            for zz in self.label2nodes[hh]:
+                if zz in self.G.nodes():
+                    node_filter.append(zz)
+            nx.draw_networkx_nodes(self.G, self.pos,
+                                   nodelist=node_filter,
+                                   node_color=self.colors[hh % len(self.colors)],
+                                   node_size=50, label=str(hh))
+
+        nx.draw_networkx_edges(self.G, self.pos,
+                               width=2, alpha=1, edge_color='grey', style=':')
+        nx.draw_networkx_edges(self.G, self.pos, edgelist=pos_edges,
+                               width=2, alpha=1, edge_color='green')
+        plt.legend()
+        plt.tight_layout()
+        if f_name is None:
             plt.savefig(
                 transform_address(
                     res_dir +
-                    f'\\{self.dataset}_{self.expl_type}_{dt_id}_{j}_{exp_edge_index.cpu().numpy().shape}.png'
+                    f'\\{self.dataset}_{self.expl_type}_{dt_id}_{expl_idx}_{exp_edge_index.cpu().numpy().shape}.png'
                 )
             )
-            plt.close()
-
-    def plot_pr_edges(self, explanations, res_dir, dt_id, f_name=None, plt_title=None):
-
-        for j, exp_edge_index in enumerate(explanations):
-            pos_edges = [(u, v) for (u, v) in exp_edge_index.t().cpu().numpy()]
-            plt.close()
-            for hh in self.list_classes:
-                node_filter = []
-                for zz in self.label2nodes[hh]:
-                    if zz in self.G.nodes():
-                        node_filter.append(zz)
-                nx.draw_networkx_nodes(self.G, self.pos,
-                                       nodelist=node_filter,
-                                       node_color=self.colors[hh % len(self.colors)],
-                                       node_size=50, label=str(hh))
-
-            nx.draw_networkx_edges(self.G, self.pos,
-                                   width=2, alpha=1, edge_color='grey', style=':')
-            nx.draw_networkx_edges(self.G, self.pos, edgelist=pos_edges,
-                                   width=2, alpha=1, edge_color='green')
-            plt.legend()
-            if plt_title is not None:
-                plt.title(plt_title)
-            else:
-                plt.title(self.title[self.expl_type])
-
-            if f_name is None:
-                plt.savefig(
-                    transform_address(
-                        res_dir +
-                        f'\\{self.dataset}_{self.expl_type}_{dt_id}_{j}_{exp_edge_index.cpu().numpy().shape}.png'
-                    )
-                )
-            else:
-                plt.savefig(
-                    transform_address(
-                        res_dir +
-                        f'\\{self.dataset}_{self.expl_type}_{dt_id}_{f_name}.png')
-                )
-            plt.close()
+        else:
+            plt.savefig(
+                transform_address(
+                    res_dir +
+                    f'\\{self.dataset}_{self.expl_type}_{dt_id}_{f_name}.png')
+            )
+        plt.close()

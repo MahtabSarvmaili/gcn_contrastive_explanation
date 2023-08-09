@@ -107,22 +107,11 @@ def main(args):
         if org_edge_label_lists is not None:
             actual_dt = np.int32(np.array(org_edge_label_lists[data['indices'][data['split'] + dt_id]]) > 0)
             actual_idxs = np.array(org_edge_label_lists[data['indices'][data['split'] + dt_id]]) > 0
-            actual_expls = [dt.edge_index[:, actual_idxs]]
+            actual_expls = dt.edge_index[:, actual_idxs]
         else:
             actual_dt = None
         print(f'Quantitative evaluation:')
         try:
-            expl_plot_idx = graph_evaluation_metrics(
-                dt,
-                explanations,
-                edge_preds,
-                args,
-                result_dir,
-                data['indices'][data['split']+dt_id],
-                actual_dt,
-                gnn_mask,
-                pg_mask,
-            )
             if args.dataset_func =='TUDataset':
                 labels = dt.x.argmax(dim=1).cpu().numpy()
                 list_classes = list(range(dt.x.shape[1]))
@@ -136,22 +125,38 @@ def main(args):
             # plotting the ground truth explanation
             if actual_expls is not None:
                 expl_plot.plot_pr_edges(
-                    actual_expls,
-                    result_dir,
-                    data['indices'][data['split'] + dt_id],
-                    'actual_expl',
-                    'Actual Explanation'
+                    exp_edge_index=actual_expls,
+                    res_dir=result_dir,
+                    dt_id=data['indices'][data['split'] + dt_id],
+                    f_name='actual_expl',
+                    plt_title='Actual Explanation'
                 )
             if args.expl_type == 'PT':
-                expl_plot.plot_pr_edges(
-                    explanations, result_dir, data['indices'][data['split']+dt_id]
+                graph_evaluation_metrics(
+                    dt,
+                    explanations,
+                    edge_preds,
+                    args,
+                    result_dir,
+                    data['indices'][data['split']+dt_id],
+                    actual_dt,
+                    gnn_mask,
+                    pg_mask,
+                    expl_plot.plot_pr_edges
                 )
-
             else:
-                expl_plot.plot_del_edges(
-                    explanations, result_dir, data['indices'][data['split']+dt_id]
+                graph_evaluation_metrics(
+                    dt,
+                    explanations,
+                    edge_preds,
+                    args,
+                    result_dir,
+                    data['indices'][data['split'] + dt_id],
+                    actual_dt,
+                    gnn_mask,
+                    pg_mask,
+                    expl_plot.plot_del_edges
                 )
-
         except:
             print(f"Error for {data['indices'][data['split']+dt_id]} data sample")
             print(traceback.format_exc())
@@ -170,7 +175,7 @@ if __name__ == '__main__':
     parser.add_argument('--cf_lr', type=float, default=0.01, help='CF-explainer learning rate.')
     parser.add_argument('--dropout', type=float, default=0.2, help='Dropout rate (1 - keep probability).')
     parser.add_argument('--cf_optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset_str', type=str, default='Mutagenicity', help='type of dataset.')
+    parser.add_argument('--dataset_str', type=str, default='AIDS', help='type of dataset.')
     parser.add_argument('--dataset_func', type=str, default='TUDataset', help='type of dataset.')
     parser.add_argument('--beta', type=float, default=0.1, help='beta variable')
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
