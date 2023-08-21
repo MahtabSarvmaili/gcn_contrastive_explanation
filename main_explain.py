@@ -15,9 +15,9 @@ from evaluation.graph_explanation_evaluation import graph_evaluation_metrics
 from evaluation.visualization import PlotGraphExplanation
 from data.graph_utils import get_graph_data
 from baselines.graph_baseline_explainer import gnnexplainer, pgexplainer
-from utils import transform_address
-# torch.manual_seed(0)
-# np.random.seed(0)
+from utils import transform_address, influential_func
+torch.manual_seed(0)
+np.random.seed(0)
 
 sys.path.append('../..')
 
@@ -66,7 +66,6 @@ def main(args):
         print(f"Explanation for {data['indices'][data['split']+dt_id]} has started!")
         explainer = GCNPerturb(data['n_features'], args.hidden, data['n_classes'], dt.edge_index, args.expl_type)
         explainer_optimizer = torch.optim.Adam(explainer.parameters(), lr=args.cf_lr)
-
         explainer.load_state_dict(
             torch.load(transform_address(result_dir+f"\\{args.dataset_str}_{args.expl_type}_model.pt")),
             strict=False
@@ -81,25 +80,29 @@ def main(args):
             y = dt.y.to(torch.int64).reshape(-1)
 
         for i in range(args.expl_epochs):
-            loss, _ = explainer.loss(dt.x.to(torch.float), dt.edge_index, dt.batch, y)
+            if args.expl_type in ['CF', 'PT', 'EXE']:
+                loss = explainer.loss(dt.x.to(torch.float), dt.edge_index, dt.batch, y)
+            if args.expl_type=='CFGNN':
+                loss = explainer.loss_cfgnn(dt.x.to(torch.float), dt.edge_index, dt.batch, dt.y)
+
             expl, edge_pred, pred_y = explainer.get_explanation(dt.x.to(torch.float), dt.edge_index, dt.batch)
 
-            if args.expl_type == 'PT' or args.expl_type == 'EXE':
+            if args.expl_type in ['EXE', 'PT']:
                 if pred_y == dt.y and expl.shape != dt.edge_index.shape:
                     explanations.append(expl)
-                    edge_preds.append(edge_pred.detach().cpu().numpy())
+                    edge_preds.append(edge_pred)
                     expl_preds.append(pred_y.detach().cpu().numpy())
-            if args.expl_type == 'CF':
+
+            if args.expl_type in ['CF', 'CFGNN']:
                 if pred_y != dt.y \
                         and expl.shape != dt.edge_index.shape:
                     explanations.append(expl)
-                    edge_preds.append(edge_pred.detach().cpu().numpy())
+                    edge_preds.append(edge_pred)
                     expl_preds.append(pred_y.detach().cpu().numpy())
             clip_grad_norm_(explainer.parameters(), 2.0)
             loss.backward()
             explainer_optimizer.step()
         print(f'Explanation has finished, number of generated explanations: {len(explanations)}')
-        # 3447 - 622 - 3517
 
         pg_mask = pgexplainer(data['train'], model, dt)
         gnn_mask = gnnexplainer(dt, model, None)
@@ -139,11 +142,13 @@ def main(args):
                     args,
                     result_dir,
                     data['indices'][data['split']+dt_id],
+                    model,
                     actual_dt,
                     gnn_mask,
                     pg_mask,
                     expl_plot.plot_pr_edges
                 )
+
             else:
                 graph_evaluation_metrics(
                     dt,
@@ -152,10 +157,11 @@ def main(args):
                     args,
                     result_dir,
                     data['indices'][data['split'] + dt_id],
+                    model,
                     actual_dt,
                     gnn_mask,
                     pg_mask,
-                    expl_plot.plot_del_edges
+                    expl_plot.plot_del_edges,
                 )
         except:
             print(f"Error for {data['indices'][data['split']+dt_id]} data sample")
@@ -167,16 +173,16 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--device', type=str, default='cuda', help='torch device.')
-    parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train the ')
-    parser.add_argument('--expl_epochs', type=int, default=200, help='Number of epochs to train the ')
-    parser.add_argument('--expl_type', type=str, default='PT', help='Type of explanation.')
+    parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train the black box model')
+    parser.add_argument('--expl_epochs', type=int, default=300, help='Number of epochs to train explainer.')
+    parser.add_argument('--expl_type', type=str, default='CFGNN', help='Type of explanation: PT, CF, EXE, CFGNN')
     parser.add_argument('--hidden', type=int, default=100, help='Number of units in hidden layer 1.')
     parser.add_argument('--lr', type=float, default=0.009, help='Initial learning rate.')
     parser.add_argument('--cf_lr', type=float, default=0.01, help='CF-explainer learning rate.')
     parser.add_argument('--dropout', type=float, default=0.2, help='Dropout rate (1 - keep probability).')
     parser.add_argument('--cf_optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset_str', type=str, default='AIDS', help='type of dataset.')
-    parser.add_argument('--dataset_func', type=str, default='TUDataset', help='type of dataset.')
+    parser.add_argument('--dataset_str', type=str, default='bbbp', help='type of dataset.')
+    parser.add_argument('--dataset_func', type=str, default='MoleculeNet', help='type of dataset.')
     parser.add_argument('--beta', type=float, default=0.1, help='beta variable')
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
     parser.add_argument('--graph_result_dir', type=str, default='\\results', help='Result directory')

@@ -8,7 +8,7 @@ from scipy.spatial.distance import euclidean
 from torch_geometric.utils import to_dense_adj, dense_to_sparse
 from evaluation.evaluation_metrics import gen_graph, centrality
 from sklearn.metrics import roc_auc_score
-from utils import transform_address
+from utils import transform_address, influential_func
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
 
 
@@ -36,15 +36,17 @@ def evaluation_criteria(expl, adj, dt, g1_cent):
 def graph_evaluation_metrics(
         dt,
         explanation,
-        edge_pred,
+        edge_preds,
         args,
         res_dir,
         dt_id,
+        f_model,
         ground_dt=None,
         gnnexplainer_mask=None,
         pgexplainer_mask=None,
-        expl_vis_func=None
+        expl_vis_func=None,
 ):
+
     g1 = gen_graph(list(range(dt.x.shape[0])), dt.edge_index.cpu().t().numpy())
     g1_cent = centrality(g1)
     adj = to_dense_adj(edge_index=dt.edge_index, max_num_nodes=dt.x.shape[0]).squeeze(dim=0)
@@ -61,38 +63,44 @@ def graph_evaluation_metrics(
         gn_s, gn_r, gn_l, gn_be, gn_cl, gn_p = evaluation_criteria(gnn_expl, adj, dt, g1_cent)
         pg_expl = dt.edge_index[:,(pgexplainer_mask>0.5)]
         pg_s, pg_r, pg_l, pg_be, pg_cl, pg_p = evaluation_criteria(pg_expl, adj, dt, g1_cent)
+        gnn_inf, _ = influential_func(f_model, dt, gnnexplainer_mask, args)
+        pg_inf, _ = influential_func(f_model, dt, pgexplainer_mask, args)
 
     for j, expl in enumerate(explanation):
         if not expl.shape.__contains__(0):
-            expl_vis_func(expl, res_dir, dt_id.item(), j)
+            # expl_vis_func(expl, res_dir, dt_id.item(), j)
             s, r, l, cl, be, p = evaluation_criteria(expl, adj, dt, g1_cent)
+
             if ground_dt is None:
                 acc=0
             else:
-                acc = roc_auc_score(ground_dt, edge_pred[j])
-
-            res.append([acc, s, r, l, cl, be, p])
+                acc = roc_auc_score(ground_dt, edge_preds[j].cpu().numpy())
+            inf_expl, inf_rand = influential_func(f_model, dt, edge_preds[j], args)
+            res.append([j, acc, s, r, l, cl, be, p, inf_expl.item(), inf_rand.item()])
             gc.collect()
 
-    res.append([gnn_acc, gn_s, gn_r, gn_l, gn_cl, gn_be, gn_p])
-    res.append([pg_acc, pg_s, pg_r, pg_l, pg_cl, pg_be, pg_p])
+    res.append(['gnn', gnn_acc, gn_s, gn_r, gn_l, gn_cl, gn_be, gn_p, gnn_inf.item(), 0])
+    res.append(['pg', pg_acc, pg_s, pg_r, pg_l, pg_cl, pg_be, pg_p, pg_inf.item(), 0])
     df = pd.DataFrame(
         res,
         columns=[
+            'index',
             'accuracy',
             'sparsity',
             'removed_edges',
             'loss_perturb',
             'closeness',
             'betweenness',
-            'present_edges'
+            'present_edges',
+            'pred_shift_expl',
+            'pred_shift_rand'
         ]
     )
     df.to_csv(
         transform_address(
             res_dir + f'\\{args.dataset_str}_{args.expl_type}_{dt_id}_{len(explanation)}.csv'
         ),
-        index=False
+        index=False, header=True
     )
     print(
 
