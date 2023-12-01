@@ -4,6 +4,7 @@ import sys
 import pandas as pd
 import numpy as np
 import torch
+from datetime import datetime
 from scipy.spatial.distance import euclidean
 from torch_geometric.utils import to_dense_adj, dense_to_sparse
 from evaluation.evaluation_metrics import gen_graph, centrality
@@ -45,6 +46,7 @@ def graph_evaluation_metrics(
         gnnexplainer_mask=None,
         pgexplainer_mask=None,
         expl_vis_func=None,
+        l1_l2_strs=''
 ):
 
     g1 = gen_graph(list(range(dt.x.shape[0])), dt.edge_index.cpu().t().numpy())
@@ -96,9 +98,12 @@ def graph_evaluation_metrics(
             'pred_shift_rand'
         ]
     )
+
+    now = datetime.now()
+    dt_string = now.strftime("%d-%m-%H-%M-%S")
     df.to_csv(
         transform_address(
-            res_dir + f'\\{args.dataset_str}_{args.expl_type}_{dt_id}_{len(explanation)}.csv'
+            res_dir + f'\\{args.dataset_str}_{args.expl_type}_{dt_id}_{len(explanation)}_{dt_string}_{l1_l2_strs}.csv'
         ),
         index=False, header=True
     )

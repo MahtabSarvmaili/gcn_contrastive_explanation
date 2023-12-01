@@ -15,7 +15,7 @@ from evaluation.graph_explanation_evaluation import graph_evaluation_metrics
 from evaluation.visualization import PlotGraphExplanation
 from data.graph_utils import get_graph_data
 from baselines.graph_baseline_explainer import gnnexplainer, pgexplainer
-from utils import transform_address, influential_func
+from utils import transform_address
 torch.manual_seed(0)
 np.random.seed(0)
 
@@ -60,6 +60,8 @@ def main(args):
             )
 
     for dt_id, dt in enumerate(data['expl_tst_dt'].dataset[:200]):
+        if data['indices'][data['split'] + dt_id]!=184:
+            continue
         expl_preds = []
         explanations = []
         edge_preds = []
@@ -125,15 +127,28 @@ def main(args):
             expl_plot = PlotGraphExplanation(
                 dt.edge_index, labels, dt.x.shape[0], list_classes, args.expl_type, args.dataset_str
             )
-            # plotting the ground truth explanation
-            if actual_expls is not None:
-                expl_plot.plot_pr_edges(
-                    exp_edge_index=actual_expls,
-                    res_dir=result_dir,
-                    dt_id=data['indices'][data['split'] + dt_id],
-                    f_name='actual_expl',
-                    plt_title='Actual Explanation'
-                )
+            # if gnn_mask is not None and pg_mask is not None:
+            #     expl_plot.plot_pr_edges(
+            #         dt.edge_index[:, gnn_mask > 0.5],
+            #         result_dir,
+            #         data['indices'][data['split'] + dt_id],
+            #         "gnnexplainer"
+            #     )
+            #     expl_plot.plot_pr_edges(
+            #         dt.edge_index[:,pg_mask.sigmoid()>0.5],
+            #         result_dir,
+            #         data['indices'][data['split']+dt_id],
+            #         "pgexplainer"
+            #     )
+            # # plotting the ground truth explanation
+            # if actual_expls is not None:
+            #     expl_plot.plot_pr_edges(
+            #         exp_edge_index=actual_expls,
+            #         res_dir=result_dir,
+            #         dt_id=data['indices'][data['split'] + dt_id],
+            #         f_name='actual_expl',
+            #     )
+
             if args.expl_type == 'PT':
                 graph_evaluation_metrics(
                     dt,
@@ -146,7 +161,8 @@ def main(args):
                     actual_dt,
                     gnn_mask,
                     pg_mask,
-                    expl_plot.plot_pr_edges
+                    expl_plot.plot_pr_edges,
+                    '_%.3f_' % explainer.psi_l1 + '%.3f_' % explainer.psi_l2
                 )
 
             else:
@@ -162,6 +178,8 @@ def main(args):
                     gnn_mask,
                     pg_mask,
                     expl_plot.plot_del_edges,
+                    '_%.3f_' % explainer.psi_l1 + '%.3f_' % explainer.psi_l2
+
                 )
         except:
             print(f"Error for {data['indices'][data['split']+dt_id]} data sample")
@@ -175,14 +193,14 @@ if __name__ == '__main__':
     parser.add_argument('--device', type=str, default='cuda', help='torch device.')
     parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train the black box model')
     parser.add_argument('--expl_epochs', type=int, default=300, help='Number of epochs to train explainer.')
-    parser.add_argument('--expl_type', type=str, default='CFGNN', help='Type of explanation: PT, CF, EXE, CFGNN')
+    parser.add_argument('--expl_type', type=str, default='EXE', help='Type of explanation: PT, CF, EXE, CFGNN')
     parser.add_argument('--hidden', type=int, default=100, help='Number of units in hidden layer 1.')
     parser.add_argument('--lr', type=float, default=0.009, help='Initial learning rate.')
     parser.add_argument('--cf_lr', type=float, default=0.01, help='CF-explainer learning rate.')
     parser.add_argument('--dropout', type=float, default=0.2, help='Dropout rate (1 - keep probability).')
     parser.add_argument('--cf_optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset_str', type=str, default='bbbp', help='type of dataset.')
-    parser.add_argument('--dataset_func', type=str, default='MoleculeNet', help='type of dataset.')
+    parser.add_argument('--dataset_str', type=str, default='MUTAG', help='type of dataset.')
+    parser.add_argument('--dataset_func', type=str, default='TUDataset', help='type of dataset.')
     parser.add_argument('--beta', type=float, default=0.1, help='beta variable')
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
     parser.add_argument('--graph_result_dir', type=str, default='\\results', help='Result directory')

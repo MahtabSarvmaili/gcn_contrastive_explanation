@@ -14,8 +14,8 @@ from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.utils.num_nodes import maybe_num_nodes
 from torch_geometric.utils import add_remaining_self_loops, add_self_loops, degree
 from torch_scatter import scatter_add, scatter_sum
-# torch.manual_seed(0)
-# np.random.seed(0)
+torch.manual_seed(0)
+np.random.seed(0)
 from layers import GraphConvolution
 
 
@@ -109,7 +109,8 @@ class GCNPerturb(nn.Module):
         self.device = device
         self.kappa = torch.tensor(kappa).cuda()
         self.const = torch.tensor(0.0, device=device)
-        self.l1_l2_psi = {'CF':[0.001,0.01], 'PT': [0.1, 0.001], 'EXE':[0.0001,0.01]}
+        # self.l1_l2_psi = {'CF': [0.001, 0.01], 'PT': [0.01, 0.001], 'EXE': [0.0001, 0.001], 'CFGNN': [0, 0]}
+        self.l1_l2_psi = {'CF': [0.0001, 0.01], 'PT': [0.1, 0.001], 'EXE': [0.0001, 0.01], 'CFGNN': [0, 0]}
         psi_l1, psi_l2 = self.l1_l2_psi[expl_type]
         self.psi_l1 = torch.tensor(psi_l1, device=device)
         self.psi_l2 = torch.tensor(psi_l2, device=device)
@@ -171,25 +172,30 @@ class GCNPerturb(nn.Module):
         return x
 
     def get_explanation(self, x, edge_index, batch):
-        P_vec = self.P_vec.sigmoid()
-        expl = edge_index[:, (P_vec > 0.5)]
-        # expl = edge_index[:, P_vec]
-        pred = self.forward_prediction(x, edge_index, batch).argmax(dim=1)
+        self.eval()
+        with torch.no_grad():
+            P_vec = self.P_vec.sigmoid()
+            expl = edge_index[:, (P_vec > 0.5)]
+            pred = torch.softmax(self.forward_prediction(x, edge_index, batch), dim=1).argmax()
+        self.train()
         return expl, P_vec, pred
 
-    def loss(self, x, edge_index, batch, y, l1=1, l2=1, ae=1, dist=1):
+    def loss(self, x, edge_index, batch, y, l1=1, l2=1):
+        self.train()
         out = self.forward(x, edge_index, batch)
         loss = self.loss_func(out, y)  # Compute the loss.
         L1 = self.__L1__()
         L2 = self.__L2__()
         loss_total = loss + self.psi_l2* l2 * L2 + l1 * self.psi_l1 * L1
-        pred_labels = self.forward_prediction(x, edge_index, batch).argmax(dim=1)
-        return loss_total, pred_labels
+        return loss_total
 
-    def single_test(self, x, test_pos_edge_index):
-
-        with torch.no_grad():
-            z = self.encode(x)
-            pred = self.decode(z, test_pos_edge_index)
-            pred = torch.sigmoid(pred)
-        return pred
+    def loss_cfgnn(self, x, edge_index, batch, y, beta=0.1):
+        self.train()
+        output = self.forward(x, edge_index, batch)
+        y_pred_new_actual = torch.softmax(output, dim=1).argmax()
+        pred_same = (y_pred_new_actual == y).float()
+        edge_weight = torch.ones(edge_index.size(1), device='cuda', requires_grad=True)
+        dist = sum(abs(self.P_vec.sigmoid() - edge_weight))/2
+        loss_pred = - F.nll_loss(output, y.to(torch.int64).reshape(-1))
+        loss_total = pred_same * loss_pred + beta * dist
+        return loss_total
