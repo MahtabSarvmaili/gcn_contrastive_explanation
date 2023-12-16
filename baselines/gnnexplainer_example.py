@@ -70,7 +70,7 @@ def train_model(model, epochs, data):
     t = trange(epochs, desc="Stats: ", position=0)
     model = model.to(device)
     for epoch in t:
-        model.train()
+        model.train_graph_classifier()
 
         loss = 0
 

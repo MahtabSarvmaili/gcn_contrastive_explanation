@@ -1,223 +1,223 @@
 import argparse
-import gc
+import traceback
 import sys
 import os
-import traceback
+import platform
 import torch
 import numpy as np
-from data.data_loader import load_data, load_synthetic, load_synthetic_AE, load_data_AE
-from data.gengraph import gen_syn1, gen_syn2, gen_syn3, gen_syn4
-from utils import normalize_adj, get_neighbourhood, perturb_sub_adjacency
-from model import GCN, train
-from cf_explainer import CFExplainer
-from gae.GAE import gae
-from evaluation.evaluation import evaluate_cf_PN, evaluate_cf_PP, swap_edges
-from visualization import plot_explanation_subgraph
+from data.data_loader import load_graph_data_
+from gnn_models.model import GCNGraph, train_graph_classifier, test_graph_classifier
+from torch.nn.utils import clip_grad_norm_
 
-# torch.manual_seed(0)
-# np.random.seed(0)
+
+from gnn_models.gcn_explainer import GCNPerturb
+from evaluation.graph_explanation_evaluation import graph_evaluation_metrics
+from evaluation.visualization import PlotGraphExplanation
+from data.graph_utils import get_graph_data
+from baselines.graph_baseline_explainer import gnnexplainer, pgexplainer
+from utils import transform_address
+torch.manual_seed(0)
+np.random.seed(0)
 
 sys.path.append('../..')
 
 
-def main(gae_args, explainer_args):
+def main(args):
     torch.cuda.empty_cache()
-    data = load_data(explainer_args)
-    data_AE = load_data_AE(explainer_args)
-    # data =load_synthetic(gen_syn1, device=explainer_args.device)
-    # data_AE = load_synthetic_AE(gen_syn1, device=explainer_args.device)
-    model = GCN(
-        nfeat=data['feat_dim'],
-        nhid=explainer_args.hidden,
-        nout=explainer_args.hidden,
-        nclasses=data['num_classes'],
-        dropout=explainer_args.dropout
+    data = load_graph_data_(args)
+
+    org_edge_lists, org_graph_labels, org_edge_label_lists, org_node_label_lists = get_graph_data(
+        transform_address(os.getcwd()+'\\data'+f'\\{args.dataset_func}'+f'\\{args.dataset_str}'+f'\\raw'),
+        args.dataset_str
     )
-    optimizer = torch.optim.Adam(model.parameters(), lr=explainer_args.lr, weight_decay=5e-4)
-    './re'
-    if explainer_args.device=='cuda':
+    result_dir = transform_address(
+        os.getcwd()+f'{args.graph_result_dir}'+f'\\{args.dataset_str}'+f'\\{args.expl_type}'
+    )
+    model = GCNGraph(data['n_features'], args.hidden, data['n_classes'])
+    if args.device== 'cuda':
         model = model.cuda()
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=5e-5)
+    criterion = torch.nn.CrossEntropyLoss(weight=data['weight'])
+    test_acc_prev = 0
+    # manually shuffling the data loaders since it doesn't shuffle automatically
+    if args.dataset_func == 'TUDataset':
+        data['train']._DataLoader__initialized=False
+        data['test']._DataLoader__initialized=False
 
-    model = train(
-        model=model,
-        features=data['features'],
-        train_adj=data['adj_norm'],
-        labels=data['labels'],
-        train_mask=data['train_mask'],
-        optimizer=optimizer,
-        epoch=explainer_args.bb_epochs,
-        val_mask=data['val_mask'],
-        dataset_name=explainer_args.dataset_str
-    )
-    model.eval()
-    output = model(data['features'], data['adj_norm'])
-    y_pred_orig = torch.argmax(output, dim=1)
-    print("test set y_true counts: {}".format(
-        np.unique(data['labels'][data['test_mask']].cpu().detach().numpy(), return_counts=True)))
-    print(
-        "test set y_pred_orig counts: {}".format(
-            np.unique(y_pred_orig[data['test_mask']].cpu().detach().numpy(), return_counts=True)
+    for epoch in range(1, args.epochs):
+        train_graph_classifier(model, criterion, optimizer, data['train'])
+        train_acc = test_graph_classifier(model, data['train'])
+        test_acc = test_graph_classifier(model, data['test'])
+        if args.dataset_func == 'TUDataset':
+            data['train'].dataset = data['train'].dataset.shuffle()
+            data['test'].dataset = data['test'].dataset.shuffle()
+        print(f'Epoch: {epoch:03d}, Train Acc: {train_acc:.4f}, Test Acc: {test_acc:.4f}')
+        if test_acc > test_acc_prev and epoch > 5:
+            test_acc_prev = test_acc
+            torch.save(
+                model.state_dict(),
+                transform_address(result_dir+f"\\{args.dataset_str}_{args.expl_type}_model.pt")
+            )
+
+    for dt_id, dt in enumerate(data['expl_tst_dt'].dataset[:200]):
+        if data['indices'][data['split'] + dt_id]!=184:
+            continue
+        expl_preds = []
+        explanations = []
+        edge_preds = []
+        print(f"Explanation for {data['indices'][data['split']+dt_id]} has started!")
+        explainer = GCNPerturb(data['n_features'], args.hidden, data['n_classes'], dt.edge_index, args.expl_type)
+        explainer_optimizer = torch.optim.Adam(explainer.parameters(), lr=args.cf_lr)
+        explainer.load_state_dict(
+            torch.load(transform_address(result_dir+f"\\{args.dataset_str}_{args.expl_type}_model.pt")),
+            strict=False
         )
-    )
-    print("Training GNN is finished.")
+        explainer.to(args.device)
+        for name, param in explainer.named_parameters():
+            if name.endswith("weight") or name.endswith("bias"):
+                param.requires_grad = False
+        if args.expl_type == 'CF':
+            y = (~(dt.y > 0)).to(torch.int64).reshape(-1,)
+        else:
+            y = dt.y.to(torch.int64).reshape(-1)
 
-    print("Training AE.")
-    graph_ae = gae(gae_args, data_AE)
-    print("Explanation step:")
+        for i in range(args.expl_epochs):
+            if args.expl_type in ['CF', 'PT', 'EXE']:
+                loss = explainer.loss(dt.x.to(torch.float), dt.edge_index, dt.batch, y)
+            if args.expl_type=='CFGNN':
+                loss = explainer.loss_cfgnn(dt.x.to(torch.float), dt.edge_index, dt.batch, dt.y)
 
-    idx_test = np.arange(0, data['n_nodes'])[data['test_mask'].cpu()]
-    test_cf_examples = []
-    for i in idx_test[:1]:
+            expl, edge_pred, pred_y = explainer.get_explanation(dt.x.to(torch.float), dt.edge_index, dt.batch)
+
+            if args.expl_type in ['EXE', 'PT']:
+                if pred_y == dt.y and expl.shape != dt.edge_index.shape:
+                    explanations.append(expl)
+                    edge_preds.append(edge_pred)
+                    expl_preds.append(pred_y.detach().cpu().numpy())
+
+            if args.expl_type in ['CF', 'CFGNN']:
+                if pred_y != dt.y \
+                        and expl.shape != dt.edge_index.shape:
+                    explanations.append(expl)
+                    edge_preds.append(edge_pred)
+                    expl_preds.append(pred_y.detach().cpu().numpy())
+            clip_grad_norm_(explainer.parameters(), 2.0)
+            loss.backward()
+            explainer_optimizer.step()
+        print(f'Explanation has finished, number of generated explanations: {len(explanations)}')
+
+        pg_mask = pgexplainer(data['train'], model, dt)
+        gnn_mask = gnnexplainer(dt, model, None)
+        actual_expls = None
+        if org_edge_label_lists is not None:
+            actual_dt = np.int32(np.array(org_edge_label_lists[data['indices'][data['split'] + dt_id]]) > 0)
+            actual_idxs = np.array(org_edge_label_lists[data['indices'][data['split'] + dt_id]]) > 0
+            actual_expls = dt.edge_index[:, actual_idxs]
+        else:
+            actual_dt = None
+        print(f'Quantitative evaluation:')
         try:
-            sub_adj, sub_feat, sub_labels, node_dict, sub_edge_index = get_neighbourhood(
-                int(i), data['edge_index'],
-                explainer_args.n_layers + 1,
-                data['features'], output.argmax(dim=1)
-            )
+            if args.dataset_func =='TUDataset':
+                labels = dt.x.argmax(dim=1).cpu().numpy()
+                list_classes = list(range(dt.x.shape[1]))
+            if args.dataset_func =='MoleculeNet':
+                labels = dt.x[:, 0].cpu().numpy()
+                list_classes = dt.x[:, 0].unique().cpu().numpy()
 
-            new_idx = node_dict[int(i)]
-            sub_output = model(sub_feat, normalize_adj(sub_adj, explainer_args.device)).argmax(dim=1)
-            # Check that original model gives same prediction on full graph and subgraph
-            with torch.no_grad():
-                print(f"Output original model, normalized - actual label: {data['labels'][i]}")
-                print(f"Output original model, full adj: {output[i].argmax()}")
-                print(
-                    f"Output original model, not normalized - sub adj: {sub_output[new_idx]}"
-                )
-            # Need to instantitate new cf model every time because size of P changes based on size of sub_adj
-            explainer = CFExplainer(
-                model=model,
-                graph_ae=graph_ae,
-                sub_adj=sub_adj,
-                sub_feat=sub_feat,
-                n_hid=explainer_args.hidden,
-                dropout=explainer_args.dropout,
-                cf_optimizer=explainer_args.cf_optimizer,
-                lr=explainer_args.cf_lr,
-                n_momentum=explainer_args.n_momentum,
-                sub_labels=sub_labels,
-                y_pred_orig=sub_labels[new_idx],
-                num_classes=data['num_classes'],
-                beta=explainer_args.beta,
-                device=explainer_args.device,
-                cf_expl=explainer_args.cf_expl,
-                algorithm=explainer_args.algorithm,
+            expl_plot = PlotGraphExplanation(
+                dt.edge_index, labels, dt.x.shape[0], list_classes, args.expl_type, args.dataset_str
             )
-            explainer.cf_model.cuda()
-            cf_example = explainer.explain(
-                node_idx=i,
-                new_idx=new_idx,
-                num_epochs=explainer_args.cf_epochs,
-                path=f'{explainer_args.graph_result_dir}/'
-                f'{explainer_args.dataset_str}/'
-                f'cf_expl_{explainer_args.cf_expl}/'
-                f'{explainer_args.algorithm}/'
-                f'_{i}_loss_.png'
-            )
-            min_sum = 10000
-            min_idx = 0
-            for ii, x in enumerate(cf_example):
-                if x[2].sum() < min_sum and x[2].sum()>0:
-                    min_sum = x[2].sum()
-                    min_idx = ii
-            cf_example_p_list = []
-            # stability evaluation
-            sub_adj_p_list = swap_edges(sub_adj, sub_edge_index, 1)
-            for sub_adj_p in sub_adj_p_list:
-                explainer = CFExplainer(
-                    model=model,
-                    graph_ae=graph_ae,
-                    sub_adj=sub_adj_p,
-                    sub_feat=sub_feat,
-                    n_hid=explainer_args.hidden,
-                    dropout=explainer_args.dropout,
-                    cf_optimizer=explainer_args.cf_optimizer,
-                    lr=explainer_args.cf_lr,
-                    n_momentum=explainer_args.n_momentum,
-                    sub_labels=sub_labels,
-                    y_pred_orig=sub_labels[new_idx],
-                    num_classes=data['num_classes'],
-                    beta=explainer_args.beta,
-                    device=explainer_args.device,
-                    cf_expl=explainer_args.cf_expl,
-                    algorithm=explainer_args.algorithm,
-                )
-                explainer.cf_model.cuda()
-                cf_example_p = explainer.explain(
-                    node_idx=i,
-                    new_idx=new_idx,
-                    num_epochs=explainer_args.cf_epochs,
-                    path=f'{explainer_args.graph_result_dir}/'
-                    f'{explainer_args.dataset_str}/'
-                    f'cf_expl_{explainer_args.cf_expl}/'
-                    f'{explainer_args.algorithm}/'
-                    f'_{i}_loss_.png'
-                )
-                cf_example_p_list.append(cf_example_p)
+            # if gnn_mask is not None and pg_mask is not None:
+            #     expl_plot.plot_pr_edges(
+            #         dt.edge_index[:, gnn_mask > 0.5],
+            #         result_dir,
+            #         data['indices'][data['split'] + dt_id],
+            #         "gnnexplainer"
+            #     )
+            #     expl_plot.plot_pr_edges(
+            #         dt.edge_index[:,pg_mask.sigmoid()>0.5],
+            #         result_dir,
+            #         data['indices'][data['split']+dt_id],
+            #         "pgexplainer"
+            #     )
+            # # plotting the ground truth explanation
+            # if actual_expls is not None:
+            #     expl_plot.plot_pr_edges(
+            #         exp_edge_index=actual_expls,
+            #         res_dir=result_dir,
+            #         dt_id=data['indices'][data['split'] + dt_id],
+            #         f_name='actual_expl',
+            #     )
 
-            test_cf_examples.append(cf_example)
-            if explainer_args.cf_expl is True:
-                evaluate_cf_PN(explainer_args, model, sub_feat, sub_adj, sub_labels, sub_edge_index, new_idx, i, cf_example, cf_example_p_list)
+            if args.expl_type == 'PT':
+                graph_evaluation_metrics(
+                    dt,
+                    explanations,
+                    edge_preds,
+                    args,
+                    result_dir,
+                    data['indices'][data['split']+dt_id],
+                    model,
+                    actual_dt,
+                    gnn_mask,
+                    pg_mask,
+                    expl_plot.plot_pr_edges,
+                    '_%.3f_' % explainer.psi_l1 + '%.3f_' % explainer.psi_l2
+                )
+
             else:
-                evaluate_cf_PP(explainer_args, model, sub_feat, sub_adj, sub_labels, sub_edge_index, new_idx, i, cf_example, cf_example_p_list)
-            print('yes!')
+                graph_evaluation_metrics(
+                    dt,
+                    explanations,
+                    edge_preds,
+                    args,
+                    result_dir,
+                    data['indices'][data['split'] + dt_id],
+                    model,
+                    actual_dt,
+                    gnn_mask,
+                    pg_mask,
+                    expl_plot.plot_del_edges,
+                    '_%.3f_' % explainer.psi_l1 + '%.3f_' % explainer.psi_l2
 
-            torch.cuda.empty_cache()
-            gc.collect()
+                )
         except:
-            traceback.print_exc()
-            pass
+            print(f"Error for {data['indices'][data['split']+dt_id]} data sample")
+            print(traceback.format_exc())
+            continue
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--device', type=str, default='cuda', help='torch device.')
-    parser.add_argument('--epochs', type=int, default=200, help='Number of epochs to train.')
-    parser.add_argument('--hidden1', type=int, default=32, help='Number of units in hidden layer 1.')
-    parser.add_argument('--hidden2', type=int, default=16, help='Number of units in hidden layer 2.')
-    parser.add_argument('--lr', type=float, default=0.01, help='Initial learning rate.')
-    parser.add_argument('--dropout', type=float, default=0.0, help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset_str', type=str, default='cora', help='type of dataset.')
-    gae_args = parser.parse_args()
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--device', type=str, default='cuda', help='torch device.')
-    parser.add_argument('--bb_epochs', type=int, default=500, help='Number of epochs to train the ')
-    parser.add_argument('--cf_epochs', type=int, default=300, help='Number of epochs to train the ')
-    parser.add_argument('--inputdim', type=int, default=10, help='Input dimension')
-    parser.add_argument('--hidden', type=int, default=20, help='Number of units in hidden layer 1.')
-    parser.add_argument('--n_layers', type=int, default=3, help='Number of units in hidden layer 1.')
+    parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train the black box model')
+    parser.add_argument('--expl_epochs', type=int, default=300, help='Number of epochs to train explainer.')
+    parser.add_argument('--expl_type', type=str, default='EXE', help='Type of explanation: PT, CF, EXE, CFGNN')
+    parser.add_argument('--hidden', type=int, default=100, help='Number of units in hidden layer 1.')
     parser.add_argument('--lr', type=float, default=0.009, help='Initial learning rate.')
-    parser.add_argument('--cf_lr', type=float, default=0.009, help='CF-explainer learning rate.')
+    parser.add_argument('--cf_lr', type=float, default=0.01, help='CF-explainer learning rate.')
     parser.add_argument('--dropout', type=float, default=0.2, help='Dropout rate (1 - keep probability).')
     parser.add_argument('--cf_optimizer', type=str, default='Adam', help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--dataset_str', type=str, default='cora', help='type of dataset.')
-    parser.add_argument('--dataset_func', type=str, default='Planetoid', help='type of dataset.')
+    parser.add_argument('--dataset_str', type=str, default='MUTAG', help='type of dataset.')
+    parser.add_argument('--dataset_func', type=str, default='TUDataset', help='type of dataset.')
     parser.add_argument('--beta', type=float, default=0.1, help='beta variable')
     parser.add_argument('--include_ae', type=bool, default=True, help='Including AutoEncoder reconstruction loss')
-    parser.add_argument('--graph_result_dir', type=str, default='./results', help='Result directory')
-    parser.add_argument('--algorithm', type=str, default='loss_PN_AE', help='Result directory')
-    parser.add_argument('--graph_result_name', type=str, default='loss_PN_AE', help='Result name')
-    parser.add_argument('--cf_train_loss', type=str, default='loss_PN_AE',
-                        help='CF explainer loss function')
+    parser.add_argument('--graph_result_dir', type=str, default='\\results', help='Result directory')
     parser.add_argument('--cf_expl', type=bool, default=True, help='CF explainer loss function')
     parser.add_argument('--n_momentum', type=float, default=0.5, help='Nesterov momentum')
-    explainer_args = parser.parse_args()
+    args = parser.parse_args()
 
-    # algorithms = [
-    #     'cfgnn', 'loss_PN_L1_L2',
-    #     'loss_PN_AE_L1_L2_dist', 'loss_PN_AE_L1_L2', 'loss_PN_AE', 'loss_PN', 'loss_PN_dist'
-    # ]
-    # datasets = ['cora', 'citeseer', 'pubmed']
-
-    if os.listdir(f'{explainer_args.graph_result_dir}/'
-                  f'{explainer_args.dataset_str}/'
-                  f'cf_expl_{explainer_args.cf_expl}/'
-                  ).__contains__(explainer_args.algorithm) is False:
+    if os.listdir(
+            transform_address(os.getcwd()+f'{args.graph_result_dir}')
+    ).__contains__(args.dataset_str) is False:
         os.mkdir(
-            f'{explainer_args.graph_result_dir}/'
-            f'{explainer_args.dataset_str}/'
-            f'cf_expl_{explainer_args.cf_expl}/'
-            f'{explainer_args.algorithm}'
+            transform_address(os.getcwd()+f'{args.graph_result_dir}'+f'\\{args.dataset_str}')
         )
-    main(gae_args, explainer_args)
+    if os.listdir(
+            transform_address(os.getcwd()+f'{args.graph_result_dir}'f'\\{args.dataset_str}')
+    ).__contains__(args.expl_type) is False:
+        os.mkdir(
+            transform_address(os.getcwd()+f'{args.graph_result_dir}'+f'\\{args.dataset_str}'+f'\\{args.expl_type}')
+        )
+    main(args)

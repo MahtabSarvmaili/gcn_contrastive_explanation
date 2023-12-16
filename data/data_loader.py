@@ -1,4 +1,4 @@
-import argparse
+import copy
 import sys
 
 sys.path.append('../../..')
@@ -6,15 +6,15 @@ import torch
 import numpy as np
 import os.path as osp
 import scipy.sparse as sp
-
+from torch_geometric.loader import DataLoader
 from torch_geometric.utils import to_dense_adj, train_test_split_edges, dense_to_sparse
 from sklearn.model_selection import StratifiedKFold
-from torch_geometric.datasets import Planetoid, TUDataset
+from torch_geometric.datasets import Planetoid, TUDataset, MoleculeNet
 import torch_geometric.transforms as T
 from torch_geometric.data import Data
 from gae.utils import preprocess_graph, mask_test_edges
 from utils import normalize, normalize_adj, sparse_mx_to_torch_sparse_tensor
-from data.gengraph import gen_syn1, preprocess_input_graph
+from data.gengraph import gen_syn1, gen_syn2
 import networkx as nx
 torch.manual_seed(0)
 np.random.seed(0)
@@ -135,84 +135,57 @@ def load_data(args):
     }
 
 
-def load_data_AE(args):
+def load_synthetic_node_data(args):
+    function = globals()[args.dataset_func]
+    g, lb, _ = function()
+    edge_index = torch.Tensor(np.array(g.edges)).to(torch.int64).to(args.device).t()
+    x = []
+    for i in g.nodes():
+        x.append(g.nodes[i]['feat'])
+    x = np.array(x)
+    x = torch.Tensor(x).to(torch.float32).to(args.device)
+    y = torch.Tensor(np.array(lb)).to(torch.int64).to(args.device)
+    data = Data(x=x, edge_index=edge_index, y=y)
     transformer = T.Compose([
         T.ToDevice(args.device),
-        T.NormalizeFeatures(),
+        T.RandomNodeSplit(split='train_rest', num_val=0.05, num_test=0.10)
     ])
-    dataset = __load__data__(args.dataset_func, args.dataset_str, transformer)
-    all_edge_index = dataset.edge_index
-    dt = train_test_split_edges(dataset, 0.05, 0.1)
-    dataset.train_mask = dataset.test_mask = dataset.val_mask = None
+    data_tmp = transformer(data)
     return {
-        'dataset':dt,
-        'n_nodes': dt.num_nodes,
-        'feat_dim': dt.num_features,
-        'num_classes': len(dt.y.unique()),
-        'all_edge_index':all_edge_index
+        'data': data,
+        'n_classes': len(data_tmp.y.unique()),
+        'n_features': data_tmp.x.shape[1],
     }
 
 
-def load_synthetic(gen_syn_func, device='cuda'):
-    G, role_id, name = gen_syn_func()
-    data = preprocess_input_graph(G, role_id, name)
-    org_adj = torch.tensor(data['org_adj'])
-    adj = torch.tensor(data['adj'], dtype=torch.float32)
-
-    edge_index = dense_to_sparse(adj)[0]
-    features = normalize(data['feat'])
-    features = torch.FloatTensor(np.array(features))
-    labels = torch.LongTensor(data['labels'])
-    dt = Data(x=features,edge_index=edge_index,y=labels)
-    transform = T.Compose([
-        T.NormalizeFeatures(),
-        T.ToDevice(device),
-        T.RandomNodeSplit(num_val=0.1, num_test=0.2),
+# loading data for graph classification
+def load_graph_data_(args, batch_size=64):
+    torch.manual_seed(0)
+    np.random.seed(0)
+    function = globals()[args.dataset_func]
+    path = osp.join(osp.dirname(osp.realpath(__file__)), args.dataset_func).replace("\\", "/")
+    transformer = T.Compose([
+        T.ToDevice(args.device),
     ])
-    dataset = transform(dt)
+    dataset = function(path, args.dataset_str,transformer)
+    dataset, indices = dataset.shuffle(return_perm=True)
+    class_sample_count = np.unique(dataset.y, return_counts=True)[1]
+    weight = 1. / class_sample_count
 
-    if device == 'cuda':
-        adj = adj.cuda()
-        org_adj = org_adj.cuda()
 
+    weight = torch.FloatTensor(weight).to(args.device)
+    split = int(len(dataset)*0.85)
+    train = dataset[:split]
+    test = dataset[split:]
+    train = DataLoader(train, batch_size=batch_size, shuffle=False)
+    test = DataLoader(test, batch_size=batch_size, shuffle=False)
     return {
-        'train_mask':dt.train_mask,
-        'val_mask':dt.val_mask,
-        'test_mask':dt.test_mask,
-        'idx_test':np.arange(dataset.num_nodes)[dt.test_mask],
-        'features':dataset.x,
-        'labels':dataset.y,
-        'adj':org_adj,
-        'adj_norm':adj,
-        'adj_orig':np.matrix(data['adj']),
-        'edge_index':dataset.edge_index,
-        'n_nodes':dataset.num_nodes,
-        'feat_dim':dataset.num_features,
-        'num_classes':len(dataset.y.unique()),
-        'dataset':dataset
-    }
-
-
-def load_synthetic_AE(gen_syn_func, device='cuda'):
-    G, role_id, name = gen_syn_func()
-    data = preprocess_input_graph(G, role_id, name)
-    adj = torch.tensor(data['adj'], dtype=torch.float32)
-    edge_index = dense_to_sparse(adj)[0]
-    features = data['feat']
-    features = torch.FloatTensor(np.array(features))
-    labels = torch.LongTensor(data['labels'])
-    dt = Data(x=features, edge_index=edge_index, y=labels)
-    transform = T.Compose([
-        T.ToDevice(device),
-        T.NormalizeFeatures(),
-    ])
-    dataset = transform(dt)
-    all_edge_index = dataset.edge_index
-    dt = train_test_split_edges(dataset, 0.05, 0.1)
-    return {
-        'dataset':dt,
-        'n_nodes': dt.num_nodes,
-        'feat_dim': dt.num_features,
-        'num_classes': len(dt.y.unique()),
-        'all_edge_index':all_edge_index
+        'train': train,
+        'test': test,
+        'split': split,
+        'indices': indices,
+        'expl_tst_dt': copy.deepcopy(test),
+        'n_features': dataset.num_features,
+        'n_classes': dataset.num_classes,
+        'weight':weight
     }

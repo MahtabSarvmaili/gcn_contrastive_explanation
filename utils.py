@@ -1,12 +1,11 @@
-import scipy.sparse as sp
 import os
+from copy import copy
 import errno
 import torch
 import numpy as np
 import pandas as pd
+import scipy.sparse as sp
 from torch_geometric.utils import k_hop_subgraph, to_dense_adj, subgraph
-# torch.manual_seed(0)
-# np.random.seed(0)
 
 
 def encode_onehot(labels):
@@ -182,3 +181,46 @@ def perturb_sub_adjacency(num_nodes, sub_adj, threshold):
         psub_adj_list.append(psub_adj)
     return psub_adj_list
 
+
+def transform_address(address:str)->str:
+    import platform
+    system = platform.system()
+    new_address = address.replace('\\', '/')
+    if system.lower().__contains__('windows'):
+        new_address = address.replace('/', '\\')
+    return new_address
+
+
+def probability_diff(model, edge_weight, dt, output):
+    loss = torch.nn.L1Loss()
+    edges = copy(dt.edge_index).cpu().numpy()
+    rm_edges = (edge_weight<=0.5).cpu().detach().numpy().nonzero()[0]
+    mod_edges = np.delete(edges, rm_edges, axis=1)
+    mod_edges = torch.Tensor(mod_edges).to(torch.int64).to('cuda')
+    a = torch.softmax(model(dt.x.to(torch.float), mod_edges, dt.batch), dim=1)
+    gnn_loss = loss(a, output)
+    return gnn_loss
+
+
+def influential_func(model, dt, edge_pred, args):
+    model.to(args.device)
+    loss = torch.nn.L1Loss()
+    edges = copy(dt.edge_index).cpu().numpy()
+    output = model(dt.x.to(torch.float), dt.edge_index.to(torch.int64), dt.batch)
+    output = torch.softmax(output, dim=1)
+
+    rm_edges = (edge_pred <= 0.5).detach().cpu().numpy().nonzero()[0]
+    if len(rm_edges)==0 or len(rm_edges)==len(edge_pred):
+        return torch.tensor(0), torch.tensor(0)
+    expl_pred_diff = probability_diff(model, edge_pred, dt, output)
+    x = np.delete(np.array(range(edge_pred.shape[0])), rm_edges)
+    if rm_edges.shape[0] < x.shape[0]:
+        rand_rm_edges = np.random.choice(x, len(rm_edges), replace=False)
+    else:
+        rand_rm_edges = np.random.choice(x, int(len(x) / 2), replace=False)
+
+    rand_mod_edges = np.delete(edges, rand_rm_edges, axis=1)
+    rand_mod_edges = torch.Tensor(rand_mod_edges).to(torch.int64).to('cuda')
+    b = torch.softmax(model(dt.x.to(torch.float), rand_mod_edges, dt.batch), dim=1)
+    rand_pred_diff = loss(b, output)
+    return expl_pred_diff, rand_pred_diff

@@ -19,7 +19,7 @@ def gen_graph(nodes, edge_list):
 
 def centrality(graph:nx.Graph):
     centrality_metrics = {}
-    centrality_metrics['brandes'] = nx.betweenness_centrality(graph)
+    # centrality_metrics['brandes'] = nx.betweenness_centrality(graph)
     centrality_metrics['closeness'] = nx.closeness_centrality(graph)
     centrality_metrics['betweenness'] = nx.betweenness_centrality(graph)
 
